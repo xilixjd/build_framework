@@ -1,10 +1,18 @@
+interface Vnode {
+  type: Function|string
+  props: object|null
+  key: string|number|null
+  _dom: HTMLElement|null
+  _component: Component|null // T extends Component ?
+}
+
 class Component {
   props: object
   context: object
   state: object
   _renderCallbacks: Array<Function>
   _dirty: Boolean
-  _vnode: object|null
+  _vnode: Vnode|null
   constructor(props: object, context: object) {
     this.props = props
     this.context = context
