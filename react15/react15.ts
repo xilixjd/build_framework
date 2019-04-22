@@ -66,9 +66,10 @@ function diffChildren(
     const oldChildDom: HTMLElement|undefined = oldChild[i]._dom
     let newChildDom: HTMLElement
     if (newKey in oldKeyObject) {
-      newChildDom = diff()
-    } else {
-      newChildDom = mount()
+      delete oldKeyObject[newKey]
+    }
+    newChildDom = diff(newChild, oldChild)
+    if (oldChildDom !== newChildDom) {
     }
   }
 }
@@ -77,7 +78,7 @@ function mount():HTMLElement {
   return document.createElement('div')
 }
 
-function diff():HTMLElement {
+function diff(newChild, oldChild):HTMLElement {
   return document.createElement('div')
 }
 
