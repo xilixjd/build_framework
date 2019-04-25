@@ -3,7 +3,7 @@ interface Props {
   // [propName: string]: any
 }
 interface Vnode {
-  type: Function|string|null
+  type: Component|Function|string|null
   props: Props|null
   text: string|null
   key: string|null
@@ -38,8 +38,11 @@ class Component {
 const EMPTY_OBJ = {}
 const EMPTY_ARRAY = []
 
+function Fragment() {}
+
 function diffChildren(
-  parentDom: HTMLElement, newParentVnode: Vnode, oldParentVnode: Vnode|null
+  parentDom: HTMLElement, newParentVnode: Vnode, oldParentVnode: Vnode|null,
+  context: object, mounts: Array<Component>, force: boolean
 ):void {
   let newChildren: Array<Vnode>|null = newParentVnode._children
   if (!newChildren) {
@@ -55,22 +58,35 @@ function diffChildren(
   let oldKeyObject: {string?: Vnode} = {}
   for (let i = 0; i < oldChildren.length; i++) {
     const oldChild: Vnode = oldChildren[i]
-    // obj 的 key 为 key + type
-    const oldKey: string = (oldChild.key || '') + (oldChild.type ? oldChild.type.toString() : '')
+    // obj 的 key 为 key/序号 + type
+    const oldKey: string = (oldChild.key || i) + (oldChild.type ? oldChild.type.toString() : '')
     oldKeyObject[oldKey] = oldChild
   }
+  let nextInsertDom: Node|HTMLElement|null = (oldChildren[0] && oldChildren[0]._dom) || null
   for (let i = 0; i < newChildren.length; i++) {
     const newChild: Vnode = newChildren[i]
     const newKey: string = (newChild.key || '') + (newChild.type ? newChild.type.toString() : '')
-    const oldChild: Vnode = oldChildren[i]
-    const oldChildDom: HTMLElement|undefined = oldChild[i]._dom
     let newChildDom: HTMLElement
     if (newKey in oldKeyObject) {
+      const oldChild: Vnode = oldKeyObject[newKey]
+      const oldChildDom: HTMLElement|undefined = oldChild._dom
+      nextInsertDom = oldChildDom && oldChildDom.nextSibling
+      // 不需要这个 dom 返回值
+      diff(parentDom, newChild, oldChild, context, mounts, force)
       delete oldKeyObject[newKey]
+    } else {
+      newChildDom = diff(parentDom, newChild, null, context, mounts, force)
+      if (nextInsertDom) {
+        document.insertBefore(newChildDom, nextInsertDom)
+      } else {
+        parentDom.appendChild(newChildDom)
+      }
     }
-    newChildDom = diff(newChild, oldChild)
-    if (oldChildDom !== newChildDom) {
-    }
+  }
+  for (const oldKey in oldKeyObject) {
+    const oldChild = oldKeyObject[oldKey]
+    // ??? unmount的顺序是否有问题
+    unmount(oldChild)
   }
 }
 
@@ -78,8 +94,22 @@ function mount():HTMLElement {
   return document.createElement('div')
 }
 
-function diff(newChild, oldChild):HTMLElement {
-  return document.createElement('div')
+function diff(
+  parentDom: HTMLElement, newVnode: Vnode|null, oldVnode: Vnode|null,
+  context: object, mounts: Array<Component>, force: boolean
+):HTMLElement {
+  // ??? 是否有必要
+  if (!newVnode) {
+    return null
+  }
+  const newVnodeType: Component|Function|string|null = newVnode.type
+  if (newVnodeType === Fragment && oldVnode.type === Fragment) {
+    
+  }
+}
+
+function unmount(vnode):void {
+
 }
 
 function toChildArray(children: Array<Vnode>|string):Array<Vnode> {
@@ -95,7 +125,7 @@ function createElement(type, props, children):Vnode {
 }
 
 function createVnode(
-  type: Function|string, props: Props|null, 
+  type: Component|Function|string, props: Props|null, 
   text: string|null, key: string|null, ref: object|null
 ):Vnode {
   const vnode: Vnode = {
