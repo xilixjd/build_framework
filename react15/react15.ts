@@ -104,6 +104,11 @@ function diff(
   }
   const newVnodeType: Component|Function|string|null = newVnode.type
   if (newVnodeType === Fragment && oldVnode.type === Fragment) {
+    diffChildren(parentDom, newVnode, oldVnode, context, mounts, force)
+    if (Array.isArray(newVnode._children) && newVnode._children[0]) {
+      return newVnode._children[0]._dom
+    }
+  } else if (typeof newVnodeType === 'function') {
     
   }
 }
