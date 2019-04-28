@@ -14,6 +14,7 @@ var __extends = (this && this.__extends) || (function () {
 var A = /** @class */ (function () {
     function A() {
     }
+    A.prototype.a = function () { };
     return A;
 }());
 var B = /** @class */ (function (_super) {
@@ -26,6 +27,4 @@ var B = /** @class */ (function (_super) {
 function g(c) {
     var a = new c('1');
 }
-g(B);
-console.log(typeof A == 'function');
-console.log(typeof g == 'function');
+console.log(B.prototype.a);

@@ -33,6 +33,8 @@ class Component {
 
   setState(state: object|Function, callback: Function):void {
   }
+
+  render() {}
 }
 
 const EMPTY_OBJ = {}
@@ -98,6 +100,7 @@ function diff(
   parentDom: HTMLElement, newVnode: Vnode|null, oldVnode: Vnode|null,
   context: object, mounts: Array<Component>, force: boolean
 ):HTMLElement {
+  let c: Component
   // ??? 是否有必要
   if (!newVnode) {
     return null
@@ -109,7 +112,19 @@ function diff(
       return newVnode._children[0]._dom
     }
   } else if (typeof newVnodeType === 'function') {
-    
+    if (newVnodeType === oldVnode.type) {
+      c = newVnode._component = oldVnode._component
+    } else {
+      if (newVnodeType.prototype && newVnodeType.prototype.render) {
+        // class组件
+        // ??? new (newVnodeType as any) 有办法不这么写吗
+        c = newVnode._component = new (newVnodeType as any)(newVnode.props, context)
+      } else {
+        // 无状态组件
+        c = newVnode._component = new Component(newVnode.props, context)
+        c.render = (newVnodeType as any)
+      }
+    }
   }
 }
 

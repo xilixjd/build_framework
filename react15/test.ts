@@ -1,15 +1,17 @@
 class A {
+  a(){}
 }
 
 class B extends A{
-
+  a():string {
+    console.log('bb')
+    return '1'
+  }
 }
 
 function g(c: Function) {
   const a = new (c as any)('1')
 }
 
-g(B)
-
-console.log(typeof A == 'function')
-console.log(typeof g == 'function')
+let b = new B()
+b.a()
