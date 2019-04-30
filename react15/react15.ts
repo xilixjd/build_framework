@@ -13,11 +13,14 @@ interface Vnode {
   _component: Component|null // T extends Component ?
 }
 
+type Render = () => Vnode|null
+type GetDerivedStateFromProps = () => object
 class Component {
   props: object
   context: object
   state: object
   _renderCallbacks: Array<Function>
+  _pendingStates: Array<object|Function>
   _dirty: Boolean
   _vnode: Vnode|null
   _componentDom: HTMLElement|null
@@ -26,6 +29,7 @@ class Component {
     this.context = context
     this.state = {}
     this._renderCallbacks = []
+    this._pendingStates = []
     this._dirty = true
     this._vnode = null
     this._componentDom = null
@@ -34,13 +38,51 @@ class Component {
   setState(state: object|Function, callback: Function):void {
   }
 
-  render() {}
+  _mergeState(nextProps, nextContext) {
+    const length = this._pendingStates.length
+    if (length === 0) {
+      return this.state
+    }
+    let pendingStates = this._pendingStates
+    this._pendingStates.length = 0
+    let nextState = { ...this.state }
+    for (let i = 0; i < length; i++) {
+      let state = pendingStates[i]
+      let tempState
+      if (typeof state === 'function') {
+        tempState = state.call(this, nextState, nextProps, nextContext)
+      } else {
+        tempState = { ...state }
+      }
+      nextState = { ...nextState, ...tempState }
+    }
+    return nextState
+  }
+
+  componentWillMount() {}
+  render():Vnode { return createVnode(null, null, null, null, null) }
+  componentDidMount() {}
+
+  getDerivedStateFromProps():object { return {} }
+  componentWillReceiveProps() {}
+  shouldComponentUpdate() {}
+  componentWillUpdate() {}
+  getSnapshotBeforeUpdate() {}
+  componentDidUpdate() {}
 }
 
 const EMPTY_OBJ = {}
 const EMPTY_ARRAY = []
 
 function Fragment() {}
+
+let isMergeState: boolean = false
+
+function mergeMiddleware(func) {
+  isMergeState = true
+  func()
+  isMergeState = false
+}
 
 function diffChildren(
   parentDom: HTMLElement, newParentVnode: Vnode, oldParentVnode: Vnode|null,
@@ -101,11 +143,13 @@ function diff(
   context: object, mounts: Array<Component>, force: boolean
 ):HTMLElement {
   let c: Component
+  let isNew: boolean
+  let isStateless: boolean = false
   // ??? 是否有必要
   if (!newVnode) {
     return null
   }
-  const newVnodeType: Component|Function|string|null = newVnode.type
+  const newVnodeType: any = newVnode.type
   if (newVnodeType === Fragment && oldVnode.type === Fragment) {
     diffChildren(parentDom, newVnode, oldVnode, context, mounts, force)
     if (Array.isArray(newVnode._children) && newVnode._children[0]) {
@@ -115,14 +159,33 @@ function diff(
     if (newVnodeType === oldVnode.type) {
       c = newVnode._component = oldVnode._component
     } else {
-      if (newVnodeType.prototype && newVnodeType.prototype.render) {
+      if ((newVnodeType as Component).render) {
         // class组件
         // ??? new (newVnodeType as any) 有办法不这么写吗
-        c = newVnode._component = new (newVnodeType as any)(newVnode.props, context)
+        c = newVnode._component = new newVnodeType(newVnode.props, context)
       } else {
         // 无状态组件
+        isStateless = true
         c = newVnode._component = new Component(newVnode.props, context)
-        c.render = (newVnodeType as any)
+        c.render = (newVnodeType as Render)
+      }
+      isNew = true
+    }
+    c._vnode = newVnode
+    c.state = c._mergeState(newVnode.props, context)
+    if (c.getDerivedStateFromProps) {
+      c.state = c.getDerivedStateFromProps()
+    }
+    if (isNew) {
+      if (!isStateless && !c.getDerivedStateFromProps && c.componentWillMount) {
+        mergeMiddleware(() => {
+          c.componentWillMount()
+        })
+      }
+      if (!isStateless && c.componentDidMount) {
+        mergeMiddleware(() => {
+          c.componentDidMount()
+        })
       }
     }
   }
