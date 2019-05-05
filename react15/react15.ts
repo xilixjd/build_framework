@@ -21,9 +21,11 @@ class Component {
   state: object
   _renderCallbacks: Array<Function>
   _pendingStates: Array<object|Function>
-  _dirty: Boolean
+  _dirty: boolean
   _vnode: Vnode|null
   _componentDom: HTMLElement|null
+  _isMergeState: boolean
+  _prevVnode: Vnode|null
   constructor(props: object, context: object) {
     this.props = props
     this.context = context
@@ -32,7 +34,9 @@ class Component {
     this._pendingStates = []
     this._dirty = true
     this._vnode = null
+    this._prevVnode = null
     this._componentDom = null
+    this._isMergeState = false
   }
 
   setState(state: object|Function, callback: Function):void {
@@ -59,16 +63,18 @@ class Component {
     return nextState
   }
 
-  componentWillMount() {}
+  componentWillMount():void {}
   render():Vnode { return createVnode(null, null, null, null, null) }
-  componentDidMount() {}
+  componentDidMount():void {}
 
   getDerivedStateFromProps():object { return {} }
-  componentWillReceiveProps() {}
-  shouldComponentUpdate() {}
-  componentWillUpdate() {}
-  getSnapshotBeforeUpdate() {}
-  componentDidUpdate() {}
+  componentWillReceiveProps(props: Props, context: object):void {}
+  shouldComponentUpdate(props: Props, state: object, context: object):void {}
+  componentWillUpdate(props: Props, state: object, context: object):void {}
+  getSnapshotBeforeUpdate():void {}
+  componentDidUpdate():void {}
+
+  getChildContext(): object { return {} }
 }
 
 const EMPTY_OBJ = {}
@@ -78,10 +84,10 @@ function Fragment() {}
 
 let isMergeState: boolean = false
 
-function mergeMiddleware(func) {
-  isMergeState = true
+function mergeMiddleware(func: Function, component: Component) {
+  component._isMergeState = true
   func()
-  isMergeState = false
+  component._isMergeState = false
 }
 
 function diffChildren(
@@ -145,6 +151,7 @@ function diff(
   let c: Component
   let isNew: boolean
   let isStateless: boolean = false
+  let dom: HTMLElement
   // ??? 是否有必要
   if (!newVnode) {
     return null
@@ -172,7 +179,6 @@ function diff(
       isNew = true
     }
     c._vnode = newVnode
-    c.state = c._mergeState(newVnode.props, context)
     if (c.getDerivedStateFromProps) {
       c.state = c.getDerivedStateFromProps()
     }
@@ -180,13 +186,34 @@ function diff(
       if (!isStateless && !c.getDerivedStateFromProps && c.componentWillMount) {
         mergeMiddleware(() => {
           c.componentWillMount()
-        })
+          c.state = c._mergeState(newVnode.props, context)
+        }, c)
       }
       if (!isStateless && c.componentDidMount) {
-        mergeMiddleware(() => {
-          c.componentDidMount()
-        })
+        mounts.push(c)
       }
+    } else {
+      if (!isStateless && !c.getDerivedStateFromProps && !force && c.componentWillReceiveProps) {
+        c.componentWillReceiveProps(newVnode.props, context)
+      }
+      // shouldComponentUpdate 要取到最新的 state
+      c.state = c._mergeState(newVnode.props, context)
+      if (!force && c.shouldComponentUpdate &&
+        !c.shouldComponentUpdate(newVnode.props, c.state, context)
+      ) {
+        let p
+        while (p = c._renderCallbacks.pop()) p.call(c)
+        c._dirty = false
+        return oldVnode._dom || null
+      }
+      if (c.componentWillUpdate) {
+        c.componentWillUpdate(newVnode.props, c.state, context)
+      }
+
+      c.context = context
+      c.props = newVnode.props
+
+      
     }
   }
 }
