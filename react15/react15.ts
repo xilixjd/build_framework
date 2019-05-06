@@ -16,7 +16,7 @@ interface Vnode {
 type Render = () => Vnode|null
 type GetDerivedStateFromProps = () => object
 class Component {
-  props: object
+  props: Props
   context: object
   state: object
   _renderCallbacks: Array<Function>
@@ -26,7 +26,7 @@ class Component {
   _componentDom: HTMLElement|null
   _isMergeState: boolean
   _prevVnode: Vnode|null
-  constructor(props: object, context: object) {
+  constructor(props: Props, context: object) {
     this.props = props
     this.context = context
     this.state = {}
@@ -64,12 +64,14 @@ class Component {
   }
 
   componentWillMount():void {}
-  render():Vnode { return createVnode(null, null, null, null, null) }
+  render(props: Props, state: object, context: object):Vnode {
+    return createVnode(null, null, null, null, null)
+  }
   componentDidMount():void {}
 
   getDerivedStateFromProps():object { return {} }
   componentWillReceiveProps(props: Props, context: object):void {}
-  shouldComponentUpdate(props: Props, state: object, context: object):void {}
+  shouldComponentUpdate(props: Props, state: object, context: object):boolean { return true }
   componentWillUpdate(props: Props, state: object, context: object):void {}
   getSnapshotBeforeUpdate():void {}
   componentDidUpdate():void {}
@@ -209,12 +211,12 @@ function diff(
       if (c.componentWillUpdate) {
         c.componentWillUpdate(newVnode.props, c.state, context)
       }
-
-      c.context = context
-      c.props = newVnode.props
-
-      
     }
+    c.context = context
+    c.props = newVnode.props
+
+    let prevVnode = c._prevVnode
+    let vnode = c._prevVnode = c.render(c.props, c.state, c.context)
   }
 }
 
@@ -230,12 +232,24 @@ function toChildArray(children: Array<Vnode>|string):Array<Vnode> {
   }
 }
 
+function coerceToVnode(vnode: Vnode|null) {
+  if (!vnode || typeof vnode === 'boolean') {
+    return null
+  }
+  if (typeof vnode === 'string' || typeof vnode === 'number') {
+    return createVnode(null, null, vnode + '', null, null)
+  }
+  if (Array.isArray(vnode)) {
+    return createElement(Fragment, null, vnode)
+  }
+}
+
 function createElement(type, props, children):Vnode {
   return createVnode(type, props, '', '', {})
 }
 
 function createVnode(
-  type: Component|Function|string, props: Props|null, 
+  type: Component|Function|string|null, props: Props|null, 
   text: string|null, key: string|null, ref: object|null
 ):Vnode {
   const vnode: Vnode = {
