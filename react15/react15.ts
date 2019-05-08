@@ -1,3 +1,8 @@
+// 难点1：diff 算法，diff 只能 diff div 等 vnode，当 diff 到相同 type 的 component，也是 diff 其 render() 结果
+// 难点2：setState 合并
+// 难点3：vnode 和 component 的关系
+// 难点4：_dirty 解决重复 setState 的问题
+
 interface Props {
   children: Array<Vnode>,
   // [propName: string]: any
@@ -7,14 +12,13 @@ interface Vnode {
   props: Props|null
   text: string|null
   key: string|null
-  ref: object|null
+  ref: Function|null
   _children: Array<Vnode>|null
   _dom: HTMLElement|null
   _component: Component|null // T extends Component ?
 }
 
 type Render = () => Vnode|null
-type GetDerivedStateFromProps = () => object
 class Component {
   props: Props
   context: object
@@ -69,11 +73,11 @@ class Component {
   }
   componentDidMount():void {}
 
-  getDerivedStateFromProps():object { return {} }
-  componentWillReceiveProps(props: Props, context: object):void {}
-  shouldComponentUpdate(props: Props, state: object, context: object):boolean { return true }
-  componentWillUpdate(props: Props, state: object, context: object):void {}
-  getSnapshotBeforeUpdate():void {}
+  getDerivedStateFromProps(props?: Props, state?: object):object { return {} }
+  componentWillReceiveProps(props?: Props, context?: object):void {}
+  shouldComponentUpdate(props?: Props, state?: object, context?: object):boolean { return true }
+  componentWillUpdate(props?: Props, state?: object, context?: object):void {}
+  getSnapshotBeforeUpdate(props?: Props, state?: object): any {}
   componentDidUpdate():void {}
 
   getChildContext(): object { return {} }
@@ -154,6 +158,9 @@ function diff(
   let isNew: boolean
   let isStateless: boolean = false
   let dom: HTMLElement
+  let snapShot: any
+  let oldState: object
+  let oldProps: Props
   // ??? 是否有必要
   if (!newVnode) {
     return null
@@ -180,14 +187,20 @@ function diff(
       }
       isNew = true
     }
+
+    oldProps = c.props
+    oldState = c.state
     c._vnode = newVnode
     if (c.getDerivedStateFromProps) {
-      c.state = c.getDerivedStateFromProps()
+      c.state = c.getDerivedStateFromProps(newVnode.props, c.state)
     }
+
     if (isNew) {
       if (!isStateless && !c.getDerivedStateFromProps && c.componentWillMount) {
         mergeMiddleware(() => {
           c.componentWillMount()
+          // willMount 之后需要 mergeState
+          // mergeState 只出现在有可能调用 setState 的情况下
           c.state = c._mergeState(newVnode.props, context)
         }, c)
       }
@@ -215,9 +228,33 @@ function diff(
     c.context = context
     c.props = newVnode.props
 
-    let prevVnode = c._prevVnode
-    let vnode = c._prevVnode = c.render(c.props, c.state, c.context)
+    const prevVnode = c._prevVnode
+    // 组件 render 后的 vnode，相当于组件的儿子
+    const vnode = c._prevVnode = c.render(c.props, c.state, c.context)
+    c._dirty = false
+
+    if (c.getChildContext) {
+      context = {...context, ...c.getChildContext()}
+    }
+
+    if (!isStateless && !isNew && c.getSnapshotBeforeUpdate) {
+      snapShot = c.getSnapshotBeforeUpdate(oldProps, oldState)
+    }
+
+    dom = diff(parentDom, vnode, prevVnode, context, mounts, force)
+
+    if (newVnode.ref) applyRef(newVnode.ref, c)
+  } else {
+    dom = diffElementNodes()
   }
+}
+
+function diffElementNodes(newVnode: Vnode, oldVnode: Vnode, context: object, mounts: Array<Component>): HTMLElement {
+  
+}
+
+function applyRef(ref: Function|null, value: HTMLElement|Component|null): void {
+  if (typeof ref === 'function') ref(value)
 }
 
 function unmount(vnode):void {
