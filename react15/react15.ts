@@ -14,7 +14,7 @@ interface Vnode {
   key: string|null
   ref: Function|null
   _children: Array<Vnode>|null
-  _dom: HTMLElement|null
+  _dom: Node|null
   _component: Component|null // T extends Component ?
 }
 
@@ -27,7 +27,7 @@ class Component {
   _pendingStates: Array<object|Function>
   _dirty: boolean
   _vnode: Vnode|null
-  _componentDom: HTMLElement|null
+  _componentDom: Node|null
   _isMergeState: boolean
   _prevVnode: Vnode|null
   constructor(props: Props, context: object) {
@@ -97,7 +97,7 @@ function mergeMiddleware(func: Function, component: Component) {
 }
 
 function diffChildren(
-  parentDom: HTMLElement, newParentVnode: Vnode, oldParentVnode: Vnode|null,
+  parentDom: Node, newParentVnode: Vnode, oldParentVnode: Vnode|null,
   context: object, mounts: Array<Component>, force: boolean
 ):void {
   let newChildren: Array<Vnode>|null = newParentVnode._children
@@ -118,14 +118,14 @@ function diffChildren(
     const oldKey: string = (oldChild.key || i) + (oldChild.type ? oldChild.type.toString() : '')
     oldKeyObject[oldKey] = oldChild
   }
-  let nextInsertDom: Node|HTMLElement|null = (oldChildren[0] && oldChildren[0]._dom) || null
+  let nextInsertDom: Node|Node|null = (oldChildren[0] && oldChildren[0]._dom) || null
   for (let i = 0; i < newChildren.length; i++) {
     const newChild: Vnode = newChildren[i]
     const newKey: string = (newChild.key || '') + (newChild.type ? newChild.type.toString() : '')
-    let newChildDom: HTMLElement
+    let newChildDom: Node
     if (newKey in oldKeyObject) {
       const oldChild: Vnode = oldKeyObject[newKey]
-      const oldChildDom: HTMLElement|undefined = oldChild._dom
+      const oldChildDom: Node|undefined = oldChild._dom
       nextInsertDom = oldChildDom && oldChildDom.nextSibling
       // 不需要这个 dom 返回值
       diff(parentDom, newChild, oldChild, context, mounts, force)
@@ -146,18 +146,18 @@ function diffChildren(
   }
 }
 
-function mount():HTMLElement {
+function mount():Node {
   return document.createElement('div')
 }
 
 function diff(
-  parentDom: HTMLElement, newVnode: Vnode|null, oldVnode: Vnode|null,
+  parentDom: Node, newVnode: Vnode|null, oldVnode: Vnode|null,
   context: object, mounts: Array<Component>, force: boolean
-):HTMLElement {
+):Node {
   let c: Component
   let isNew: boolean
   let isStateless: boolean = false
-  let dom: HTMLElement
+  let dom: Node
   let snapShot: any
   let oldState: object
   let oldProps: Props
@@ -245,15 +245,21 @@ function diff(
 
     if (newVnode.ref) applyRef(newVnode.ref, c)
   } else {
-    dom = diffElementNodes()
+    dom = diffElementNodes(newVnode, oldVnode, context, mounts)
   }
 }
 
-function diffElementNodes(newVnode: Vnode, oldVnode: Vnode, context: object, mounts: Array<Component>): HTMLElement {
-  
+function diffElementNodes(newVnode: Vnode, oldVnode: Vnode, context: object, mounts: Array<Component>): Node {
+  let dom: Node = oldVnode._dom
+  if (!newVnode.type) {
+    if (newVnode.text !== oldVnode.text) {
+      dom.textContent = newVnode.text
+    }
+  } else {}
+  return dom
 }
 
-function applyRef(ref: Function|null, value: HTMLElement|Component|null): void {
+function applyRef(ref: Function|null, value: Node|Component|null): void {
   if (typeof ref === 'function') ref(value)
 }
 
@@ -282,12 +288,12 @@ function coerceToVnode(vnode: Vnode|null) {
 }
 
 function createElement(type, props, children):Vnode {
-  return createVnode(type, props, '', '', {})
+  return createVnode(type, props, '', '', null)
 }
 
 function createVnode(
   type: Component|Function|string|null, props: Props|null, 
-  text: string|null, key: string|null, ref: object|null
+  text: string|null, key: string|null, ref: Function|null
 ):Vnode {
   const vnode: Vnode = {
     type,
