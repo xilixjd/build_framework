@@ -3,9 +3,19 @@
 // 难点3：vnode 和 component 的关系
 // 难点4：_dirty 解决重复 setState 的问题
 
+interface ExpandElement extends Element {
+  // select multiple
+  multiple?: any
+  nextSibling: any
+}
 interface Props {
   children: Array<Vnode>,
-  // [propName: string]: any
+  dangerouslySetInnerHTML?: { __html: string|null }
+  multiple?: any
+  key?: any
+  value?: any
+  checked?: any
+  [propName: string]: any
 }
 interface Vnode {
   type: Component|Function|string|null
@@ -14,7 +24,7 @@ interface Vnode {
   key: string|null
   ref: Function|null
   _children: Array<Vnode>|null
-  _dom: Node|null
+  _dom: ExpandElement|null
   _component: Component|null // T extends Component ?
 }
 
@@ -27,7 +37,7 @@ class Component {
   _pendingStates: Array<object|Function>
   _dirty: boolean
   _vnode: Vnode|null
-  _componentDom: Node|null
+  _componentDom: ExpandElement|null
   _isMergeState: boolean
   _prevVnode: Vnode|null
   constructor(props: Props, context: object) {
@@ -97,8 +107,8 @@ function mergeMiddleware(func: Function, component: Component) {
 }
 
 function diffChildren(
-  parentDom: Node, newParentVnode: Vnode, oldParentVnode: Vnode|null,
-  context: object, mounts: Array<Component>, force: boolean
+  parentDom: ExpandElement, newParentVnode: Vnode, oldParentVnode: Vnode|null,
+  context: object, mounts: Array<Component>
 ):void {
   let newChildren: Array<Vnode>|null = newParentVnode._children
   if (!newChildren) {
@@ -118,20 +128,20 @@ function diffChildren(
     const oldKey: string = (oldChild.key || i) + (oldChild.type ? oldChild.type.toString() : '')
     oldKeyObject[oldKey] = oldChild
   }
-  let nextInsertDom: Node|Node|null = (oldChildren[0] && oldChildren[0]._dom) || null
+  let nextInsertDom: ExpandElement|null = (oldChildren[0] && oldChildren[0]._dom) || null
   for (let i = 0; i < newChildren.length; i++) {
     const newChild: Vnode = newChildren[i]
     const newKey: string = (newChild.key || '') + (newChild.type ? newChild.type.toString() : '')
-    let newChildDom: Node
+    let newChildDom: ExpandElement
     if (newKey in oldKeyObject) {
       const oldChild: Vnode = oldKeyObject[newKey]
-      const oldChildDom: Node|undefined = oldChild._dom
+      const oldChildDom: ExpandElement|undefined = oldChild._dom
       nextInsertDom = oldChildDom && oldChildDom.nextSibling
       // 不需要这个 dom 返回值
-      diff(parentDom, newChild, oldChild, context, mounts, force)
+      diff(parentDom, newChild, oldChild, context, mounts, false)
       delete oldKeyObject[newKey]
     } else {
-      newChildDom = diff(parentDom, newChild, null, context, mounts, force)
+      newChildDom = diff(parentDom, newChild, null, context, mounts, false)
       if (nextInsertDom) {
         document.insertBefore(newChildDom, nextInsertDom)
       } else {
@@ -146,18 +156,18 @@ function diffChildren(
   }
 }
 
-function mount():Node {
+function mount():ExpandElement {
   return document.createElement('div')
 }
 
 function diff(
-  parentDom: Node, newVnode: Vnode|null, oldVnode: Vnode|null,
-  context: object, mounts: Array<Component>, force: boolean
-):Node {
+  parentDom: ExpandElement, newVnode: Vnode|null, oldVnode: Vnode|null,
+  context: object, mounts: Array<Component>, force: boolean|null
+):ExpandElement {
   let c: Component
   let isNew: boolean
   let isStateless: boolean = false
-  let dom: Node
+  let dom: ExpandElement
   let snapShot: any
   let oldState: object
   let oldProps: Props
@@ -167,7 +177,7 @@ function diff(
   }
   const newVnodeType: any = newVnode.type
   if (newVnodeType === Fragment && oldVnode.type === Fragment) {
-    diffChildren(parentDom, newVnode, oldVnode, context, mounts, force)
+    diffChildren(parentDom, newVnode, oldVnode, context, mounts)
     if (Array.isArray(newVnode._children) && newVnode._children[0]) {
       return newVnode._children[0]._dom
     }
@@ -208,7 +218,7 @@ function diff(
         mounts.push(c)
       }
     } else {
-      if (!isStateless && !c.getDerivedStateFromProps && !force && c.componentWillReceiveProps) {
+      if (!isStateless && !c.getDerivedStateFromProps && force === null && c.componentWillReceiveProps) {
         c.componentWillReceiveProps(newVnode.props, context)
       }
       // shouldComponentUpdate 要取到最新的 state
@@ -241,7 +251,7 @@ function diff(
       snapShot = c.getSnapshotBeforeUpdate(oldProps, oldState)
     }
 
-    dom = diff(parentDom, vnode, prevVnode, context, mounts, force)
+    dom = diff(parentDom, vnode, prevVnode, context, mounts, null)
 
     if (newVnode.ref) applyRef(newVnode.ref, c)
   } else {
@@ -249,17 +259,38 @@ function diff(
   }
 }
 
-function diffElementNodes(newVnode: Vnode, oldVnode: Vnode, context: object, mounts: Array<Component>): Node {
-  let dom: Node = oldVnode._dom
+function diffElementNodes(newVnode: Vnode, oldVnode: Vnode, context: object, mounts: Array<Component>): ExpandElement {
+  let dom: ExpandElement = oldVnode._dom
   if (!newVnode.type) {
     if (newVnode.text !== oldVnode.text) {
       dom.textContent = newVnode.text
     }
-  } else {}
+  } else {
+    const newProps = newVnode.props
+    const oldProps = oldVnode.props
+    const newHtml = newProps.dangerouslySetInnerHTML
+    const oldHtml = oldProps.dangerouslySetInnerHTML
+    if (newHtml || oldHtml) {
+      if (!newHtml || !oldHtml || newHtml.__html !== oldHtml.__html) {
+        dom.innerHTML = newHtml && newHtml.__html || ''
+      }
+    }
+    if (newProps.multiple) dom.multiple = newProps.multiple
+    diffChildren(dom, newVnode, oldVnode, context, mounts)
+    diffProps(dom, newProps, oldProps)
+  }
   return dom
 }
 
-function applyRef(ref: Function|null, value: Node|Component|null): void {
+function diffProps(dom: ExpandElement, newProps: Props, oldProps: Props) {
+  for (let propKey in newProps) {
+    if (propKey !== 'children' && propKey !== 'key') {
+      if (!oldProps || (propKey === 'value' || propKey === 'checked'))
+    }
+  }
+}
+
+function applyRef(ref: Function|null, value: ExpandElement|Component|null): void {
   if (typeof ref === 'function') ref(value)
 }
 
