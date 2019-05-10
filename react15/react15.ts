@@ -15,6 +15,7 @@ interface Props {
   key?: any
   value?: any
   checked?: any
+  style?: any
   [propName: string]: any
 }
 interface Vnode {
@@ -285,8 +286,27 @@ function diffElementNodes(newVnode: Vnode, oldVnode: Vnode, context: object, mou
 function diffProps(dom: ExpandElement, newProps: Props, oldProps: Props) {
   for (let propKey in newProps) {
     if (propKey !== 'children' && propKey !== 'key') {
-      if (!oldProps || (propKey === 'value' || propKey === 'checked'))
+      if (!oldProps[propKey]) {
+        setProperty(dom, propKey, newProps[propKey], oldProps[propKey])
+      } else if (propKey === 'value' || propKey === 'checked') {
+        if (dom[propKey] !== newProps[propKey]) {
+          setProperty(dom, propKey, newProps[propKey], oldProps[propKey])
+        }
+      } else if (!(propKey === 'value' || propKey === 'checked')) {
+        if (oldProps[propKey] !== newProps[propKey]) {
+          setProperty(dom, propKey, newProps[propKey], oldProps[propKey])
+        }
+      }
     }
+  }
+}
+
+function setProperty(dom: ExpandElement, propKey: string, value: any, oldValue: any) {
+  if (propKey === 'class') {
+    propKey = 'className'
+  }
+  if (propKey === 'style') {
+    
   }
 }
 
