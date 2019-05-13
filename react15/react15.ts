@@ -7,6 +7,8 @@ interface ExpandElement extends Element {
   // select multiple
   multiple?: any
   nextSibling: any
+  style: { cssText: string, [propName: string]: any, setProperty: Function }
+  _listeners?: {}
 }
 interface Props {
   children: Array<Vnode>,
@@ -96,6 +98,7 @@ class Component {
 
 const EMPTY_OBJ = {}
 const EMPTY_ARRAY = []
+const CAMEL_REG = /-?(?=[A-Z])/g
 
 function Fragment() {}
 
@@ -306,12 +309,56 @@ function setProperty(dom: ExpandElement, propKey: string, value: any, oldValue: 
     propKey = 'className'
   }
   if (propKey === 'style') {
-    
+    if (typeof value === 'string') {
+      dom.style.cssText = value
+    } else {
+      if (typeof oldValue === 'string') {
+        dom.style.cssText = ''
+      } else {
+        for (const oldKey in oldValue) {
+          if (!value || !(oldKey in value)) {
+            dom.style.setProperty(oldKey.replace(CAMEL_REG, '-'), '')
+          }
+        }
+      }
+      for (const key in value) {
+        let styleValue = value[key]
+        if (!oldValue || styleValue !== oldValue[key]) {
+          if (typeof styleValue === 'number') {
+            styleValue = styleValue + 'px'
+          }
+          dom.style.setProperty(key.replace(CAMEL_REG, '-'), styleValue)
+        }
+      }
+    }
+  } else if (propKey === 'dangerouslySetInnerHTML') {
+    return
+  } else if (propKey[0] === 'o' && propKey[1] === 'n') {
+    let useCapture = propKey !== (propKey = propKey.replace(/Capture$/, ''));
+    let nameLower = propKey.toLowerCase();
+    propKey = (nameLower in dom ? nameLower : propKey).substring(2);
+
+    if (value) {
+      if (!oldValue) dom.addEventListener(propKey, eventProxy, useCapture);
+    } else {
+      dom.removeEventListener(propKey, eventProxy, useCapture);
+    }
+    (dom._listeners || (dom._listeners = {}))[propKey] = value;
+  } else if (propKey !== 'list' && propKey !== 'tagName' && (propKey in dom)) {
+    dom[propKey] = value == null ? '' : value;
+  } else if (!value) {
+    dom.removeAttribute(propKey);
+  } else if (typeof value !== 'function') {
+    dom.setAttribute(propKey, value);
   }
 }
 
 function applyRef(ref: Function|null, value: ExpandElement|Component|null): void {
   if (typeof ref === 'function') ref(value)
+}
+
+function eventProxy(e) {
+  return this._listeners[e.type](e)
 }
 
 function unmount(vnode):void {
