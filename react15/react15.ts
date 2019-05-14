@@ -9,9 +9,10 @@ interface ExpandElement extends Element {
   nextSibling: any
   style: { cssText: string, [propName: string]: any, setProperty: Function }
   _listeners?: {}
+  parentDom?: Element
 }
 interface Props {
-  children: Array<Vnode>,
+  children?: Array<Vnode>|string,
   dangerouslySetInnerHTML?: { __html: string|null }
   multiple?: any
   key?: any
@@ -27,7 +28,7 @@ interface Vnode {
   key: string|null
   ref: Function|null
   _children: Array<Vnode>|null
-  _dom: ExpandElement|null
+  _dom: ExpandElement|Text|null
   _component: Component|null // T extends Component ?
 }
 
@@ -43,6 +44,7 @@ class Component {
   _componentDom: ExpandElement|null
   _isMergeState: boolean
   _prevVnode: Vnode|null
+  defaultProps: any
   constructor(props: Props, context: object) {
     this.props = props
     this.context = context
@@ -54,6 +56,7 @@ class Component {
     this._prevVnode = null
     this._componentDom = null
     this._isMergeState = false
+    this.defaultProps = null
   }
 
   setState(state: object|Function, callback: Function):void {
@@ -91,7 +94,8 @@ class Component {
   shouldComponentUpdate(props?: Props, state?: object, context?: object):boolean { return true }
   componentWillUpdate(props?: Props, state?: object, context?: object):void {}
   getSnapshotBeforeUpdate(props?: Props, state?: object): any {}
-  componentDidUpdate():void {}
+  componentDidUpdate(props?: Props, state?: object, snapShot?: any):void {}
+  componentWillUnmount():void {}
 
   getChildContext(): object { return {} }
 }
@@ -111,7 +115,7 @@ function mergeMiddleware(func: Function, component: Component) {
 }
 
 function diffChildren(
-  parentDom: ExpandElement, newParentVnode: Vnode, oldParentVnode: Vnode|null,
+  parentDom: ExpandElement|Text, newParentVnode: Vnode, oldParentVnode: Vnode|null,
   context: object, mounts: Array<Component>
 ):void {
   let newChildren: Array<Vnode>|null = newParentVnode._children
@@ -132,14 +136,14 @@ function diffChildren(
     const oldKey: string = (oldChild.key || i) + (oldChild.type ? oldChild.type.toString() : '')
     oldKeyObject[oldKey] = oldChild
   }
-  let nextInsertDom: ExpandElement|null = (oldChildren[0] && oldChildren[0]._dom) || null
+  let nextInsertDom: ExpandElement|Text|null = (oldChildren[0] && oldChildren[0]._dom) || null
   for (let i = 0; i < newChildren.length; i++) {
     const newChild: Vnode = newChildren[i]
     const newKey: string = (newChild.key || '') + (newChild.type ? newChild.type.toString() : '')
-    let newChildDom: ExpandElement
+    let newChildDom: ExpandElement|Text
     if (newKey in oldKeyObject) {
       const oldChild: Vnode = oldKeyObject[newKey]
-      const oldChildDom: ExpandElement|undefined = oldChild._dom
+      const oldChildDom: ExpandElement|Text|undefined = oldChild._dom
       nextInsertDom = oldChildDom && oldChildDom.nextSibling
       // 不需要这个 dom 返回值
       diff(parentDom, newChild, oldChild, context, mounts, false)
@@ -160,18 +164,14 @@ function diffChildren(
   }
 }
 
-function mount():ExpandElement {
-  return document.createElement('div')
-}
-
 function diff(
-  parentDom: ExpandElement, newVnode: Vnode|null, oldVnode: Vnode|null,
+  parentDom: ExpandElement|Text, newVnode: Vnode|null, oldVnode: Vnode|null,
   context: object, mounts: Array<Component>, force: boolean|null
-):ExpandElement {
+):ExpandElement|Text {
   let c: Component
   let isNew: boolean
   let isStateless: boolean = false
-  let dom: ExpandElement
+  let dom: ExpandElement|Text
   let snapShot: any
   let oldState: object
   let oldProps: Props
@@ -180,16 +180,16 @@ function diff(
     return null
   }
   const newVnodeType: any = newVnode.type
-  if (newVnodeType === Fragment && oldVnode.type === Fragment) {
+  if (newVnodeType === Fragment && oldVnode && oldVnode.type === Fragment) {
     diffChildren(parentDom, newVnode, oldVnode, context, mounts)
     if (Array.isArray(newVnode._children) && newVnode._children[0]) {
       return newVnode._children[0]._dom
     }
   } else if (typeof newVnodeType === 'function') {
-    if (newVnodeType === oldVnode.type) {
+    if (oldVnode && newVnodeType === oldVnode.type) {
       c = newVnode._component = oldVnode._component
     } else {
-      if ((newVnodeType as Component).render) {
+      if (newVnodeType.prototype.render) {
         // class组件
         // ??? new (newVnodeType as any) 有办法不这么写吗
         c = newVnode._component = new newVnodeType(newVnode.props, context)
@@ -261,27 +261,47 @@ function diff(
   } else {
     dom = diffElementNodes(newVnode, oldVnode, context, mounts)
   }
+
+  newVnode._dom = dom
+
+  if (c) {
+    let callback
+    while (callback = c._renderCallbacks.pop()) callback.call(c)
+
+    if (!isStateless && !isNew && oldProps && c.componentDidUpdate) {
+      c.componentDidUpdate(oldProps, oldState, snapShot)
+    }
+  }
+
+  return dom
 }
 
-function diffElementNodes(newVnode: Vnode, oldVnode: Vnode, context: object, mounts: Array<Component>): ExpandElement {
-  let dom: ExpandElement = oldVnode._dom
+function diffElementNodes(
+  newVnode: Vnode, oldVnode: Vnode|null, context: object, mounts: Array<Component>
+): ExpandElement|Text {
+  let dom: ExpandElement|Text = oldVnode && oldVnode._dom || null
   if (!newVnode.type) {
-    if (newVnode.text !== oldVnode.text) {
+    if (!dom) {
+      dom = document.createTextNode(newVnode.text)
+    } else if (newVnode.text !== oldVnode.text) {
       dom.textContent = newVnode.text
     }
   } else {
+    if (!dom) {
+      dom = document.createElement(newVnode.type as string)
+    }
     const newProps = newVnode.props
-    const oldProps = oldVnode.props
+    const oldProps = oldVnode && oldVnode.props || {}
     const newHtml = newProps.dangerouslySetInnerHTML
     const oldHtml = oldProps.dangerouslySetInnerHTML
     if (newHtml || oldHtml) {
       if (!newHtml || !oldHtml || newHtml.__html !== oldHtml.__html) {
-        dom.innerHTML = newHtml && newHtml.__html || ''
+        (dom as ExpandElement).innerHTML = newHtml && newHtml.__html || ''
       }
     }
-    if (newProps.multiple) dom.multiple = newProps.multiple
+    if (newProps.multiple) (dom as ExpandElement).multiple = newProps.multiple
     diffChildren(dom, newVnode, oldVnode, context, mounts)
-    diffProps(dom, newProps, oldProps)
+    diffProps(dom as ExpandElement, newProps, oldProps)
   }
   return dom
 }
@@ -334,22 +354,22 @@ function setProperty(dom: ExpandElement, propKey: string, value: any, oldValue: 
   } else if (propKey === 'dangerouslySetInnerHTML') {
     return
   } else if (propKey[0] === 'o' && propKey[1] === 'n') {
-    let useCapture = propKey !== (propKey = propKey.replace(/Capture$/, ''));
-    let nameLower = propKey.toLowerCase();
-    propKey = (nameLower in dom ? nameLower : propKey).substring(2);
+    let useCapture = propKey !== (propKey = propKey.replace(/Capture$/, ''))
+    let nameLower = propKey.toLowerCase()
+    propKey = (nameLower in dom ? nameLower : propKey).substring(2)
 
     if (value) {
-      if (!oldValue) dom.addEventListener(propKey, eventProxy, useCapture);
+      if (!oldValue) dom.addEventListener(propKey, eventProxy, useCapture)
     } else {
-      dom.removeEventListener(propKey, eventProxy, useCapture);
+      dom.removeEventListener(propKey, eventProxy, useCapture)
     }
-    (dom._listeners || (dom._listeners = {}))[propKey] = value;
+    (dom._listeners || (dom._listeners = {}))[propKey] = value
   } else if (propKey !== 'list' && propKey !== 'tagName' && (propKey in dom)) {
-    dom[propKey] = value == null ? '' : value;
+    dom[propKey] = value == null ? '' : value
   } else if (!value) {
-    dom.removeAttribute(propKey);
+    dom.removeAttribute(propKey)
   } else if (typeof value !== 'function') {
-    dom.setAttribute(propKey, value);
+    dom.setAttribute(propKey, value)
   }
 }
 
@@ -361,8 +381,30 @@ function eventProxy(e) {
   return this._listeners[e.type](e)
 }
 
-function unmount(vnode):void {
+function unmount(vnode: Vnode):void {
+  if (vnode.ref) {
+    applyRef(vnode.ref, null)
+  }
 
+  const dom = vnode._dom
+  if (dom) {
+    const parentDom = (dom as ExpandElement).parentDom
+    if (parentDom) {
+      parentDom.removeChild(dom)
+    }
+  }
+
+  vnode._dom = null
+
+  const component = vnode._component
+  if (component && component.componentWillUnmount) {
+    component.componentWillUnmount()
+    if (component._prevVnode) unmount(component._prevVnode)
+  } else if (vnode._children) {
+    for (let i = 0; i < vnode._children.length; i++) {
+      unmount(vnode._children[i])
+    }
+  }
 }
 
 function toChildArray(children: Array<Vnode>|string):Array<Vnode> {
@@ -385,7 +427,29 @@ function coerceToVnode(vnode: Vnode|null) {
   }
 }
 
-function createElement(type, props, children):Vnode {
+function createElement(
+  type: Component|Function|string|null,
+  props: Props|null, children: Array<Vnode>|Vnode|string
+):Vnode {
+  let childrenText = typeof children === 'string' ? children : null
+  let childrenArray = Array.isArray(children) ? children : [children]
+  if (!props) props = {}
+  if (arguments.length > 3) {
+    for (let i = 3; i < arguments.length; i++) {
+      childrenArray.push(arguments[i])
+    }
+  }
+  // ??? 恶心，解决办法？
+  if (childrenText) {
+    props.children = childrenText
+  } else if (children) {
+    props.children = childrenArray as Array<Vnode>
+  }
+  if (type != null && (type as Component).defaultProps != null) {
+    for (let i in (type as Component).defaultProps) {
+      if (props[i] === undefined) props[i] = (type as Component).defaultProps[i]
+    }
+  }
   return createVnode(type, props, '', '', null)
 }
 
@@ -404,4 +468,29 @@ function createVnode(
     _component: null,
   }
   return vnode
+}
+
+function callDidmount(mounts: Array<Component>):void {
+  let c: Component
+  while (c = mounts.pop()) {
+    c.componentDidMount()
+  }
+}
+
+function render(vnode: Vnode, parentDom: ExpandElement) {
+  let mounts = []
+  vnode = createElement(Fragment, null, [vnode])
+  diffChildren(parentDom, vnode, null, EMPTY_OBJ, mounts)
+  callDidmount(mounts)
+}
+
+interface myWindow extends Window {
+  React: object
+  ReactDOM: object
+}
+(window as myWindow).React = (window as myWindow).ReactDOM = {
+  Component,
+  createElement,
+  render,
+  Fragment
 }
