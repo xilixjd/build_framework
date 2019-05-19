@@ -12,7 +12,7 @@ interface ExpandElement extends Element {
   parentDom?: Element
 }
 interface Props {
-  children?: Array<Vnode>|string,
+  children?: Array<Vnode>,
   dangerouslySetInnerHTML?: { __html: string|null }
   multiple?: any
   key?: any
@@ -33,7 +33,22 @@ interface Vnode {
 }
 
 type Render = () => Vnode|null
+
 class Component {
+  componentWillMount?: Function
+  render?: Function
+  componentDidMount?: Function
+
+  getDerivedStateFromProps?: Function
+  componentWillReceiveProps?: Function
+  shouldComponentUpdate?: Function
+  componentWillUpdate?: Function
+  getSnapshotBeforeUpdate?: Function
+  componentDidUpdate?: Function
+  componentWillUnmount?: Function
+
+  getChildContext?: Function
+
   props: Props
   context: object
   state: object
@@ -46,8 +61,8 @@ class Component {
   _prevVnode: Vnode|null
   defaultProps: any
   constructor(props: Props, context: object) {
-    this.props = props
-    this.context = context
+    this.props = props || {}
+    this.context = context || {}
     this.state = {}
     this._renderCallbacks = []
     this._pendingStates = []
@@ -83,21 +98,21 @@ class Component {
     return nextState
   }
 
-  componentWillMount():void {}
-  render(props: Props, state: object, context: object):Vnode {
-    return createVnode(null, null, null, null, null)
-  }
-  componentDidMount():void {}
+  // componentWillMount():void {}
+  // render(props: Props, state: object, context: object):Vnode {
+  //   return createVnode(null, null, null, null, null)
+  // }
+  // componentDidMount():void {}
 
-  getDerivedStateFromProps(props?: Props, state?: object):object { return {} }
-  componentWillReceiveProps(props?: Props, context?: object):void {}
-  shouldComponentUpdate(props?: Props, state?: object, context?: object):boolean { return true }
-  componentWillUpdate(props?: Props, state?: object, context?: object):void {}
-  getSnapshotBeforeUpdate(props?: Props, state?: object): any {}
-  componentDidUpdate(props?: Props, state?: object, snapShot?: any):void {}
-  componentWillUnmount():void {}
+  // getDerivedStateFromProps(props?: Props, state?: object):object { return {} }
+  // componentWillReceiveProps(props?: Props, context?: object):void {}
+  // shouldComponentUpdate(props?: Props, state?: object, context?: object):boolean { return true }
+  // componentWillUpdate(props?: Props, state?: object, context?: object):void {}
+  // getSnapshotBeforeUpdate(props?: Props, state?: object): any {}
+  // componentDidUpdate(props?: Props, state?: object, snapShot?: any):void {}
+  // componentWillUnmount():void {}
 
-  getChildContext(): object { return {} }
+  // getChildContext(): object { return {} }
 }
 
 const EMPTY_OBJ = {}
@@ -150,10 +165,12 @@ function diffChildren(
       delete oldKeyObject[newKey]
     } else {
       newChildDom = diff(parentDom, newChild, null, context, mounts, false)
-      if (nextInsertDom) {
-        document.insertBefore(newChildDom, nextInsertDom)
-      } else {
-        parentDom.appendChild(newChildDom)
+      if (newChildDom) {
+        if (nextInsertDom) {
+          document.insertBefore(newChildDom, nextInsertDom)
+        } else {
+          parentDom.appendChild(newChildDom)
+        }
       }
     }
   }
@@ -210,7 +227,9 @@ function diff(
     }
 
     if (isNew) {
-      if (!isStateless && !c.getDerivedStateFromProps && c.componentWillMount) {
+      if (!isStateless && !c.getDerivedStateFromProps
+        && c.componentWillMount
+      ) {
         mergeMiddleware(() => {
           c.componentWillMount()
           // willMount 之后需要 mergeState
@@ -222,7 +241,9 @@ function diff(
         mounts.push(c)
       }
     } else {
-      if (!isStateless && !c.getDerivedStateFromProps && force === null && c.componentWillReceiveProps) {
+      if (!isStateless && !c.getDerivedStateFromProps && force === null
+        && c.componentWillReceiveProps
+      ) {
         c.componentWillReceiveProps(newVnode.props, context)
       }
       // shouldComponentUpdate 要取到最新的 state
@@ -397,7 +418,7 @@ function unmount(vnode: Vnode):void {
   vnode._dom = null
 
   const component = vnode._component
-  if (component && component.componentWillUnmount) {
+  if (component && (vnode.type as any).prototype.componentWillUnmount) {
     component.componentWillUnmount()
     if (component._prevVnode) unmount(component._prevVnode)
   } else if (vnode._children) {
@@ -409,7 +430,15 @@ function unmount(vnode: Vnode):void {
 
 function toChildArray(children: Array<Vnode>|string):Array<Vnode> {
   if (Array.isArray(children)) {
-    return [...children]
+    let resultChildren:Array<Vnode> = []
+    for (let i = 0; i < children.length; i++) {
+      if (typeof children[i] === 'string') {
+        resultChildren.push(createElement(null, null, children[i]))
+      } else {
+        resultChildren.push(children[i])
+      }
+    }
+    return [...resultChildren]
   } else {
     return [createElement(null, null, children)]
   }
@@ -441,7 +470,7 @@ function createElement(
   }
   // ??? 恶心，解决办法？
   if (childrenText) {
-    props.children = childrenText
+    props.children = [createVnode(null, null, childrenText, null, null)]
   } else if (children) {
     props.children = childrenArray as Array<Vnode>
   }

@@ -15,8 +15,8 @@ var __assign = (this && this.__assign) || function () {
 };
 var Component = /** @class */ (function () {
     function Component(props, context) {
-        this.props = props;
-        this.context = context;
+        this.props = props || {};
+        this.context = context || {};
         this.state = {};
         this._renderCallbacks = [];
         this._pendingStates = [];
@@ -50,19 +50,6 @@ var Component = /** @class */ (function () {
         }
         return nextState;
     };
-    Component.prototype.componentWillMount = function () { };
-    Component.prototype.render = function (props, state, context) {
-        return createVnode(null, null, null, null, null);
-    };
-    Component.prototype.componentDidMount = function () { };
-    Component.prototype.getDerivedStateFromProps = function (props, state) { return {}; };
-    Component.prototype.componentWillReceiveProps = function (props, context) { };
-    Component.prototype.shouldComponentUpdate = function (props, state, context) { return true; };
-    Component.prototype.componentWillUpdate = function (props, state, context) { };
-    Component.prototype.getSnapshotBeforeUpdate = function (props, state) { };
-    Component.prototype.componentDidUpdate = function (props, state, snapShot) { };
-    Component.prototype.componentWillUnmount = function () { };
-    Component.prototype.getChildContext = function () { return {}; };
     return Component;
 }());
 var EMPTY_OBJ = {};
@@ -110,11 +97,13 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
         }
         else {
             newChildDom = diff(parentDom, newChild, null, context, mounts, false);
-            if (nextInsertDom) {
-                document.insertBefore(newChildDom, nextInsertDom);
-            }
-            else {
-                parentDom.appendChild(newChildDom);
+            if (newChildDom) {
+                if (nextInsertDom) {
+                    document.insertBefore(newChildDom, nextInsertDom);
+                }
+                else {
+                    parentDom.appendChild(newChildDom);
+                }
             }
         }
     }
@@ -168,7 +157,8 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
             c.state = c.getDerivedStateFromProps(newVnode.props, c.state);
         }
         if (isNew) {
-            if (!isStateless && !c.getDerivedStateFromProps && c.componentWillMount) {
+            if (!isStateless && !c.getDerivedStateFromProps
+                && c.componentWillMount) {
                 mergeMiddleware(function () {
                     c.componentWillMount();
                     // willMount 之后需要 mergeState
@@ -181,7 +171,8 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
             }
         }
         else {
-            if (!isStateless && !c.getDerivedStateFromProps && force === null && c.componentWillReceiveProps) {
+            if (!isStateless && !c.getDerivedStateFromProps && force === null
+                && c.componentWillReceiveProps) {
                 c.componentWillReceiveProps(newVnode.props, context);
             }
             // shouldComponentUpdate 要取到最新的 state
@@ -353,7 +344,7 @@ function unmount(vnode) {
     }
     vnode._dom = null;
     var component = vnode._component;
-    if (component && component.componentWillUnmount) {
+    if (component && vnode.type.prototype.componentWillUnmount) {
         component.componentWillUnmount();
         if (component._prevVnode)
             unmount(component._prevVnode);
@@ -366,7 +357,16 @@ function unmount(vnode) {
 }
 function toChildArray(children) {
     if (Array.isArray(children)) {
-        return children.slice();
+        var resultChildren = [];
+        for (var i = 0; i < children.length; i++) {
+            if (typeof children[i] === 'string') {
+                resultChildren.push(createElement(null, null, children[i]));
+            }
+            else {
+                resultChildren.push(children[i]);
+            }
+        }
+        return resultChildren.slice();
     }
     else {
         return [createElement(null, null, children)];
@@ -395,7 +395,7 @@ function createElement(type, props, children) {
     }
     // ??? 恶心，解决办法？
     if (childrenText) {
-        props.children = childrenText;
+        props.children = [createVnode(null, null, childrenText, null, null)];
     }
     else if (children) {
         props.children = childrenArray;
