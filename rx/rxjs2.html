@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <script src="./Rx.js"></script>
+</head>
+
+<body>
+  <input type="text" id="input-1">
+  <!-- <button id="button-1">button1</button> -->
+  <div id="div-1"></div>
+  <script>
+    var text = document.querySelector('#input-1')
+    var div = document.querySelector('#div-1')
+    var flag = true
+
+    var inputStream1 = Rx.Observable.fromEvent(text, 'input') //为dom元素绑定'keyup'事件
+      .pluck('target', 'value') // 取值
+      .debounceTime(2000) // 防抖动
+      .do(data => {
+        if (flag) div.appendChild(createDiv('2000ms ' + data))
+      })
+      .filter((data) => data.substring(data.length - 3, data.length) === '456')
+      .switchMap(() => {
+        flag = false
+        return inputStream2
+      })
+
+    var inputStream2 = Rx.Observable.fromEvent(text, 'input') //为dom元素绑定'keyup'事件
+      .pluck('target', 'value') // 取值
+      .debounceTime(250) // 防抖动
+      .do(data => div.appendChild(createDiv('250ms ' + data)))
+      .takeUntil(Rx.Observable.fromEvent(text, 'blur'))
+
+    inputStream1.subscribe()
+    text.onblur = function () {
+      flag = true
+    }
+
+    function createDiv(text) {
+      var div = document.createElement("div")
+      div.textContent = text
+      return div
+    }
+  </script>
+</body>
+
+</html>
