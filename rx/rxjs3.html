@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <style>
+    .show {
+      display: block;
+      width: 300px;
+      border: 1px solid;
+    }
+    .off {
+      display: none;
+    }
+    #input-1 {
+      line-height: 30px;
+      font-size: 30px;
+    }
+    div#div-1 {
+      font-size: 20px;
+    }
+  </style>
+  <script src="./Rx.js"></script>
+  <script src="./moment.js"></script>
+</head>
+
+<body>
+  <input type="text" id="input-1">
+  <button id="button-1">3000ms</button>
+  <button id="button-2">1000ms</button>
+  <button id="button-3">100ms</button>
+  <div id="div-1"></div>
+
+  <script>
+    let text = document.querySelector('#input-1')
+    let buttons = document.querySelectorAll('button')
+    let div = document.querySelector('#div-1')
+
+    var stream = Rx.Observable.fromEvent(buttons, 'click') //为dom元素绑定'input'事件
+      .map((e) => {
+        const timeout = Number(e.target.textContent.match(/\d+/)[0])
+        return Rx.Observable.fromPromise(getSearch(timeout))
+      })
+      .concatAll()
+      .subscribe(p => {
+        text.value = p + 'ms'
+        let tempDiv = document.createElement('div')
+        tempDiv.innerHTML = p + 'ms'
+        div.appendChild(tempDiv)
+      })
+
+    function getSearch(timeout) {
+      return new Promise(res => {
+        setTimeout(() => {
+          res(timeout)
+        }, timeout)
+      })
+    }
+
+    function fillDiv(data) {
+
+      div.appendChild()
+    }
+  </script>
+</body>
+
+</html>

@@ -15,7 +15,7 @@
     var flag = true
 
     var inputStream1 = Rx.Observable.fromEvent(text, 'input') //为dom元素绑定'keyup'事件
-      .pluck('target', 'value') // 取值
+      .map((e) => e.target.value) // 取值
       .debounceTime(2000) // 防抖动
       .do(data => {
         if (flag) div.appendChild(createDiv('2000ms ' + data))
@@ -27,7 +27,7 @@
       })
 
     var inputStream2 = Rx.Observable.fromEvent(text, 'input') //为dom元素绑定'keyup'事件
-      .pluck('target', 'value') // 取值
+      .map((e) => e.target.value) // 取值
       .debounceTime(250) // 防抖动
       .do(data => div.appendChild(createDiv('250ms ' + data)))
       .takeUntil(Rx.Observable.fromEvent(text, 'blur'))
