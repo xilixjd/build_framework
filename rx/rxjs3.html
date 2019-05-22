@@ -42,10 +42,7 @@
       })
       .concatAll()
       .subscribe(p => {
-        text.value = p + 'ms'
-        let tempDiv = document.createElement('div')
-        tempDiv.innerHTML = p + 'ms'
-        div.appendChild(tempDiv)
+        fillDiv(p)
       })
 
     function getSearch(timeout) {
@@ -57,8 +54,10 @@
     }
 
     function fillDiv(data) {
-
-      div.appendChild()
+      text.value = data + 'ms'
+      let tempDiv = document.createElement('div')
+      tempDiv.innerHTML = data + 'ms'
+      div.appendChild(tempDiv)
     }
   </script>
 </body>

@@ -70,20 +70,6 @@
   </script>
 </body>
 <script>
-Rx.Observable.fromEvent(document, 'keydown')
-.map((e) => e.keyCode)
-.bufferCount(4, 1)
-.switchMap((arr) => Rx.Observable.of(arr).do((arr) => {
-    console.log(arr)
-    if (arr.slice(0, 4).toString() === '65,66,67') {
-        alert('1成功')
-    }
-}).switchMap((arr) => {
-	if (arr.slice(3).toString() === '68') {
-		alert('2成功')
-	}
-}).timeout(1000))
-.timeout(3000)
-.subscribe()
+
 </script>
 </html>
