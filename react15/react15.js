@@ -395,7 +395,7 @@ function createElement(type, props, children) {
     }
     // ??? 恶心，解决办法？
     if (childrenText) {
-        props.children = [createVnode(null, null, childrenText, null, null)];
+        return createVnode(null, null, childrenText, null, null);
     }
     else if (children) {
         props.children = childrenArray;
