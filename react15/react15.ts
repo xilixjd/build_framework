@@ -144,17 +144,20 @@ function diffChildren(
     newChildren = newParentVnode._children
   }
   const oldChildren: Array<Vnode> = oldParentVnode ? oldParentVnode._children : EMPTY_ARRAY
-  let oldKeyObject: {string?: Vnode} = {}
+  let oldKeyObject: {oldKey?: Vnode} = {}
   for (let i = 0; i < oldChildren.length; i++) {
     const oldChild: Vnode = oldChildren[i]
+    // 如果不设 key 且更新时打乱顺序，那么对应的 child 会重新渲染
+    const childKey: string = oldChild.key || ('key' + i)
     // obj 的 key 为 key/序号 + type
-    const oldKey: string = (oldChild.key || i) + (oldChild.type ? oldChild.type.toString() : '')
+    const oldKey: string = childKey + (oldChild.type ? oldChild.type.toString() : '')
     oldKeyObject[oldKey] = oldChild
   }
   let nextInsertDom: ExpandElement|Text|null = (oldChildren[0] && oldChildren[0]._dom) || null
   for (let i = 0; i < newChildren.length; i++) {
     const newChild: Vnode = newChildren[i]
-    const newKey: string = (newChild.key || '') + (newChild.type ? newChild.type.toString() : '')
+    const childKey: string = newChild.key || ('key' + i)
+    const newKey: string = childKey + (newChild.type ? newChild.type.toString() : '')
     let newChildDom: ExpandElement|Text
     if (newKey in oldKeyObject) {
       const oldChild: Vnode = oldKeyObject[newKey]
