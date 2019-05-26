@@ -78,14 +78,17 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
     var oldKeyObject = {};
     for (var i = 0; i < oldChildren.length; i++) {
         var oldChild = oldChildren[i];
+        // 如果不设 key 且更新时打乱顺序，那么对应的 child 会重新渲染
+        var childKey = oldChild.key || ('key' + i);
         // obj 的 key 为 key/序号 + type
-        var oldKey = (oldChild.key || i) + (oldChild.type ? oldChild.type.toString() : '');
+        var oldKey = childKey + (oldChild.type ? oldChild.type.toString() : '');
         oldKeyObject[oldKey] = oldChild;
     }
     var nextInsertDom = (oldChildren[0] && oldChildren[0]._dom) || null;
     for (var i = 0; i < newChildren.length; i++) {
         var newChild = newChildren[i];
-        var newKey = (newChild.key || '') + (newChild.type ? newChild.type.toString() : '');
+        var childKey = newChild.key || ('key' + i);
+        var newKey = childKey + (newChild.type ? newChild.type.toString() : '');
         var newChildDom = void 0;
         if (newKey in oldKeyObject) {
             var oldChild = oldKeyObject[newKey];
@@ -97,6 +100,7 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
         }
         else {
             newChildDom = diff(parentDom, newChild, null, context, mounts, false);
+            console.log(parentDom, newChildDom, newChild, newChildren)
             if (newChildDom) {
                 if (nextInsertDom) {
                     document.insertBefore(newChildDom, nextInsertDom);
@@ -126,10 +130,11 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
         return null;
     }
     var newVnodeType = newVnode.type;
-    if (newVnodeType === Fragment && oldVnode && oldVnode.type === Fragment) {
+    if (newVnodeType === Fragment) {
         diffChildren(parentDom, newVnode, oldVnode, context, mounts);
         if (Array.isArray(newVnode._children) && newVnode._children[0]) {
-            return newVnode._children[0]._dom;
+            // return newVnode._children[0]._dom;
+            return null
         }
     }
     else if (typeof newVnodeType === 'function') {
@@ -394,11 +399,11 @@ function createElement(type, props, children) {
         }
     }
     // ??? 恶心，解决办法？
-    if (childrenText) {
+    if (childrenText && !type) {
         return createVnode(null, null, childrenText, null, null);
     }
-    else if (children) {
-        props.children = childrenArray;
+    else {
+        props.children = childrenArray || [];
     }
     if (type != null && type.defaultProps != null) {
         for (var i in type.defaultProps) {
@@ -406,7 +411,7 @@ function createElement(type, props, children) {
                 props[i] = type.defaultProps[i];
         }
     }
-    return createVnode(type, props, '', '', null);
+    return createVnode(type, props, null, props.key, null);
 }
 function createVnode(type, props, text, key, ref) {
     var vnode = {

@@ -15,7 +15,7 @@ interface Props {
   children?: Array<Vnode>,
   dangerouslySetInnerHTML?: { __html: string|null }
   multiple?: any
-  key?: any
+  key?: string|null
   value?: any
   checked?: any
   style?: any
@@ -145,6 +145,7 @@ function diffChildren(
   }
   const oldChildren: Array<Vnode> = oldParentVnode ? oldParentVnode._children : EMPTY_ARRAY
   let oldKeyObject: {oldKey?: Vnode} = {}
+
   for (let i = 0; i < oldChildren.length; i++) {
     const oldChild: Vnode = oldChildren[i]
     // 如果不设 key 且更新时打乱顺序，那么对应的 child 会重新渲染
@@ -154,6 +155,8 @@ function diffChildren(
     oldKeyObject[oldKey] = oldChild
   }
   let nextInsertDom: ExpandElement|Text|null = (oldChildren[0] && oldChildren[0]._dom) || null
+  // 新 child 中能与老节点对应的最大 index，用于处理调换顺序导致插入困难的问题
+  let newChildMaxIndex = 0
   for (let i = 0; i < newChildren.length; i++) {
     const newChild: Vnode = newChildren[i]
     const childKey: string = newChild.key || ('key' + i)
@@ -162,7 +165,9 @@ function diffChildren(
     if (newKey in oldKeyObject) {
       const oldChild: Vnode = oldKeyObject[newKey]
       const oldChildDom: ExpandElement|Text|undefined = oldChild._dom
+      // ??? 未考虑顺序调换的插入问题，只要是调换顺序，newChildren 中之后的都是新调用重新渲染，这与react16一致，而 preact 不是
       nextInsertDom = oldChildDom && oldChildDom.nextSibling
+      
       // 不需要这个 dom 返回值
       diff(parentDom, newChild, oldChild, context, mounts, false)
       delete oldKeyObject[newKey]
@@ -196,15 +201,16 @@ function diff(
   let oldState: object
   let oldProps: Props
   // ??? 是否有必要
-  if (!newVnode) {
-    return null
-  }
+  // if (!newVnode) {
+  //   return null
+  // }
   const newVnodeType: any = newVnode.type
-  if (newVnodeType === Fragment && oldVnode && oldVnode.type === Fragment) {
+  if (newVnodeType === Fragment) {
     diffChildren(parentDom, newVnode, oldVnode, context, mounts)
-    if (Array.isArray(newVnode._children) && newVnode._children[0]) {
-      return newVnode._children[0]._dom
-    }
+    return null
+    // if (Array.isArray(newVnode._children) && newVnode._children[0]) {
+    //   return newVnode._children[0]._dom
+    // }
   } else if (typeof newVnodeType === 'function') {
     if (oldVnode && newVnodeType === oldVnode.type) {
       c = newVnode._component = oldVnode._component
@@ -472,17 +478,17 @@ function createElement(
     }
   }
   // ??? 恶心，解决办法？
-  if (childrenText) {
+  if (childrenText && !type) {
     return createVnode(null, null, childrenText, null, null)
-  } else if (children) {
-    props.children = childrenArray as Array<Vnode>
+  } else {
+    props.children = childrenArray as Array<Vnode> || []
   }
   if (type != null && (type as Component).defaultProps != null) {
     for (let i in (type as Component).defaultProps) {
       if (props[i] === undefined) props[i] = (type as Component).defaultProps[i]
     }
   }
-  return createVnode(type, props, '', '', null)
+  return createVnode(type, props, null, props.key, null)
 }
 
 function createVnode(
