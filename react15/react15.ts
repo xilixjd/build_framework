@@ -31,6 +31,12 @@ interface Vnode {
   _dom: ExpandElement|Text|null
   _component: Component|null // T extends Component ?
 }
+interface IndexVnodeDict {
+  [key:string]: {
+    index: number,
+    vnode: Vnode
+  }
+}
 
 type Render = () => Vnode|null
 
@@ -144,7 +150,7 @@ function diffChildren(
     newChildren = newParentVnode._children
   }
   const oldChildren: Array<Vnode> = oldParentVnode ? oldParentVnode._children : EMPTY_ARRAY
-  let oldKeyObject: {oldKey?: Vnode} = {}
+  let oldKeyObject: IndexVnodeDict = {}
 
   for (let i = 0; i < oldChildren.length; i++) {
     const oldChild: Vnode = oldChildren[i]
@@ -152,24 +158,45 @@ function diffChildren(
     const childKey: string = oldChild.key || ('key' + i)
     // obj 的 key 为 key/序号 + type
     const oldKey: string = childKey + (oldChild.type ? oldChild.type.toString() : '')
-    oldKeyObject[oldKey] = oldChild
+    oldKeyObject[oldKey] = {
+      index: i,
+      vnode: oldChild,
+    }
   }
   let nextInsertDom: ExpandElement|Text|null = (oldChildren[0] && oldChildren[0]._dom) || null
   // 新 child 中能与老节点对应的最大 index，用于处理调换顺序导致插入困难的问题
-  let newChildMaxIndex = 0
+  let newChildMaxIndex: number = 0
+  let firstFlag: boolean = true
   for (let i = 0; i < newChildren.length; i++) {
     const newChild: Vnode = newChildren[i]
     const childKey: string = newChild.key || ('key' + i)
     const newKey: string = childKey + (newChild.type ? newChild.type.toString() : '')
     let newChildDom: ExpandElement|Text
     if (newKey in oldKeyObject) {
-      const oldChild: Vnode = oldKeyObject[newKey]
+      const oldChild: Vnode = oldKeyObject[newKey].vnode
+      const oldIndex: number = oldKeyObject[newKey].index
       const oldChildDom: ExpandElement|Text|undefined = oldChild._dom
-      // ??? 未考虑顺序调换的插入问题，只要是调换顺序，newChildren 中之后的都是新调用重新渲染，这与react16一致，而 preact 不是
-      nextInsertDom = oldChildDom && oldChildDom.nextSibling
-      
-      // 不需要这个 dom 返回值
-      diff(parentDom, newChild, oldChild, context, mounts, false)
+      if (firstFlag) {
+        newChildMaxIndex = oldIndex
+        firstFlag = false
+      }
+      // ??? 需要考虑顺序调换的插入问题，只要是调换顺序，newChildren 中之后的都是新调用重新渲染，这与react16一致，而 preact 不是
+      if (oldIndex < newChildMaxIndex) {
+        newChildDom = diff(parentDom, newChild, null, context, mounts, false)
+        if (newChildDom) {
+          if (nextInsertDom) {
+            document.insertBefore(newChildDom, nextInsertDom)
+          } else {
+            parentDom.appendChild(newChildDom)
+          }
+        }
+        newChildMaxIndex = oldIndex
+      } else {
+        nextInsertDom = oldChildDom && oldChildDom.nextSibling
+        // 不需要这个 dom 返回值
+        diff(parentDom, newChild, oldChild, context, mounts, false)
+        newChildMaxIndex = oldIndex
+      }
       delete oldKeyObject[newKey]
     } else {
       newChildDom = diff(parentDom, newChild, null, context, mounts, false)
@@ -183,7 +210,7 @@ function diffChildren(
     }
   }
   for (const oldKey in oldKeyObject) {
-    const oldChild = oldKeyObject[oldKey]
+    const oldChild: Vnode = oldKeyObject[oldKey].vnode
     // ??? unmount的顺序是否有问题
     unmount(oldChild)
   }
