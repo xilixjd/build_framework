@@ -83,6 +83,26 @@ class Component {
   }
 
   setState(state: object|Function, callback: Function):void {
+    if (callback) {
+      this._renderCallbacks.push(callback)
+    }
+    if (this._isMergeState) {
+      this._pendingStates.push(state)
+    } else {
+      this.forceUpdate(false)
+    }
+  }
+
+  forceUpdate(callback: Function|boolean) {
+    const force: boolean = callback !== false
+    let mounts: Array<Component> = []
+    const vnode: Vnode = this._vnode
+    const parentDom: ExpandElement = vnode._dom.parentElement
+    diff(parentDom, vnode, vnode, this.context, mounts, force)
+    callDidmount(mounts)
+    if (typeof callback === 'function') {
+      callback()
+    }
   }
 
   _mergeState(nextProps, nextContext) {
@@ -457,7 +477,7 @@ function unmount(vnode: Vnode):void {
   vnode._dom = null
 
   const component = vnode._component
-  if (component && (vnode.type as any).prototype.componentWillUnmount) {
+  if (component && component.componentWillUnmount) {
     component.componentWillUnmount()
     if (component._prevVnode) unmount(component._prevVnode)
   } else if (vnode._children) {
