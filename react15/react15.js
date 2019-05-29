@@ -82,25 +82,53 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
         var childKey = oldChild.key || ('key' + i);
         // obj 的 key 为 key/序号 + type
         var oldKey = childKey + (oldChild.type ? oldChild.type.toString() : '');
-        oldKeyObject[oldKey] = oldChild;
+        oldKeyObject[oldKey] = {
+            index: i,
+            vnode: oldChild
+        };
     }
     var nextInsertDom = (oldChildren[0] && oldChildren[0]._dom) || null;
+    // 新 child 中能与老节点对应的最大 index，用于处理调换顺序导致插入困难的问题
+    var newChildMaxIndex = 0;
+    var firstFlag = true;
     for (var i = 0; i < newChildren.length; i++) {
         var newChild = newChildren[i];
         var childKey = newChild.key || ('key' + i);
         var newKey = childKey + (newChild.type ? newChild.type.toString() : '');
         var newChildDom = void 0;
         if (newKey in oldKeyObject) {
-            var oldChild = oldKeyObject[newKey];
+            var oldChild = oldKeyObject[newKey].vnode;
+            var oldIndex = oldKeyObject[newKey].index;
             var oldChildDom = oldChild._dom;
-            nextInsertDom = oldChildDom && oldChildDom.nextSibling;
-            // 不需要这个 dom 返回值
-            diff(parentDom, newChild, oldChild, context, mounts, false);
+            if (firstFlag) {
+                newChildMaxIndex = oldIndex;
+                firstFlag = false;
+            }
+            // 需要考虑顺序调换的插入问题，只要是调换顺序，在最大序号 child 之后的都是重新渲染
+            // 如有一个组件有 componentDidMount 且被调换顺序，则每次调换都会触发 componentDidMount
+            // 这与react16一致，而 preact 不是
+            if (oldIndex < newChildMaxIndex) {
+                newChildDom = diff(parentDom, newChild, null, context, mounts, false);
+                if (newChildDom) {
+                    if (nextInsertDom) {
+                        document.insertBefore(newChildDom, nextInsertDom);
+                    }
+                    else {
+                        parentDom.appendChild(newChildDom);
+                    }
+                }
+                newChildMaxIndex = oldIndex;
+            }
+            else {
+                nextInsertDom = oldChildDom && oldChildDom.nextSibling;
+                // 不需要这个 dom 返回值
+                diff(parentDom, newChild, oldChild, context, mounts, false);
+                newChildMaxIndex = oldIndex;
+            }
             delete oldKeyObject[newKey];
         }
         else {
             newChildDom = diff(parentDom, newChild, null, context, mounts, false);
-            console.log(parentDom, newChildDom, newChild, newChildren)
             if (newChildDom) {
                 if (nextInsertDom) {
                     document.insertBefore(newChildDom, nextInsertDom);
@@ -112,7 +140,7 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
         }
     }
     for (var oldKey in oldKeyObject) {
-        var oldChild = oldKeyObject[oldKey];
+        var oldChild = oldKeyObject[oldKey].vnode;
         // ??? unmount的顺序是否有问题
         unmount(oldChild);
     }
@@ -126,16 +154,16 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
     var oldState;
     var oldProps;
     // ??? 是否有必要
-    if (!newVnode) {
-        return null;
-    }
+    // if (!newVnode) {
+    //   return null
+    // }
     var newVnodeType = newVnode.type;
     if (newVnodeType === Fragment) {
         diffChildren(parentDom, newVnode, oldVnode, context, mounts);
-        if (Array.isArray(newVnode._children) && newVnode._children[0]) {
-            // return newVnode._children[0]._dom;
-            return null
-        }
+        return null;
+        // if (Array.isArray(newVnode._children) && newVnode._children[0]) {
+        //   return newVnode._children[0]._dom
+        // }
     }
     else if (typeof newVnodeType === 'function') {
         if (oldVnode && newVnodeType === oldVnode.type) {
@@ -364,7 +392,7 @@ function toChildArray(children) {
     if (Array.isArray(children)) {
         var resultChildren = [];
         for (var i = 0; i < children.length; i++) {
-            if (typeof children[i] === 'string') {
+            if (typeof children[i] === 'string' || typeof children[i] === 'number') {
                 resultChildren.push(createElement(null, null, children[i]));
             }
             else {
@@ -389,13 +417,27 @@ function coerceToVnode(vnode) {
     }
 }
 function createElement(type, props, children) {
-    var childrenText = typeof children === 'string' ? children : null;
-    var childrenArray = Array.isArray(children) ? children : [children];
+    var childrenText = null;
+    if (typeof children === 'string') {
+        childrenText = children;
+    }
+    else if (typeof children === 'number') {
+        childrenText = children + '';
+    }
+    var childrenArray = Array.isArray(children) ? children : (children ? [children] : []);
     if (!props)
         props = {};
     if (arguments.length > 3) {
         for (var i = 3; i < arguments.length; i++) {
-            childrenArray.push(arguments[i]);
+            var child = arguments[i];
+            if (Array.isArray(child) && child.type !== Fragment) {
+                var tempProps = { children: child };
+                var tempVnode = createVnode(Fragment, tempProps, null, null, null);
+                childrenArray.push(tempVnode);
+            }
+            else {
+                childrenArray.push(child);
+            }
         }
     }
     // ??? 恶心，解决办法？
@@ -403,7 +445,7 @@ function createElement(type, props, children) {
         return createVnode(null, null, childrenText, null, null);
     }
     else {
-        props.children = childrenArray || [];
+        props.children = childrenArray;
     }
     if (type != null && type.defaultProps != null) {
         for (var i in type.defaultProps) {

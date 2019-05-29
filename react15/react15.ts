@@ -2,6 +2,8 @@
 // 难点2：setState 合并
 // 难点3：vnode 和 component 的关系
 // 难点4：_dirty 解决重复 setState 的问题
+// 难点5：diffChildren 时顺序变换的解决办法
+// 难点6：render 后是全新的 vnode 怎么保证组件的复用
 
 interface ExpandElement extends Element {
   // select multiple
@@ -180,7 +182,9 @@ function diffChildren(
         newChildMaxIndex = oldIndex
         firstFlag = false
       }
-      // ??? 需要考虑顺序调换的插入问题，只要是调换顺序，newChildren 中之后的都是新调用重新渲染，这与react16一致，而 preact 不是
+      // 需要考虑顺序调换的插入问题，只要是调换顺序，在最大序号 child 之后的都是重新渲染
+      // 如有一个组件有 componentDidMount 且被调换顺序，则每次调换都会触发 componentDidMount
+      // 这与react16一致，而 preact 不是
       if (oldIndex < newChildMaxIndex) {
         newChildDom = diff(parentDom, newChild, null, context, mounts, false)
         if (newChildDom) {
@@ -244,7 +248,6 @@ function diff(
     } else {
       if (newVnodeType.prototype.render) {
         // class组件
-        // ??? new (newVnodeType as any) 有办法不这么写吗
         c = newVnode._component = new newVnodeType(newVnode.props, context)
       } else {
         // 无状态组件
@@ -305,7 +308,7 @@ function diff(
     c._dirty = false
 
     if (c.getChildContext) {
-      context = {...context, ...c.getChildContext()}
+      context = { ...context, ...c.getChildContext() }
     }
 
     if (!isStateless && !isNew && c.getSnapshotBeforeUpdate) {
@@ -468,7 +471,7 @@ function toChildArray(children: Array<Vnode>|string):Array<Vnode> {
   if (Array.isArray(children)) {
     let resultChildren:Array<Vnode> = []
     for (let i = 0; i < children.length; i++) {
-      if (typeof children[i] === 'string') {
+      if (typeof children[i] === 'string' || typeof children[i] === 'number') {
         resultChildren.push(createElement(null, null, children[i]))
       } else {
         resultChildren.push(children[i])
@@ -494,21 +497,34 @@ function coerceToVnode(vnode: Vnode|null) {
 
 function createElement(
   type: Component|Function|string|null,
-  props: Props|null, children: Array<Vnode>|Vnode|string
+  props: Props|null, children: Array<Vnode>|Vnode|string|number
 ):Vnode {
-  let childrenText = typeof children === 'string' ? children : null
-  let childrenArray = Array.isArray(children) ? children : [children]
+  let childrenText: string = null
+  if (typeof children === 'string') {
+    childrenText = children
+  } else if (typeof children === 'number') {
+    childrenText = children + ''
+  }
+  let childrenArray = Array.isArray(children) ? children : (children ? [children] : [])
   if (!props) props = {}
+
   if (arguments.length > 3) {
     for (let i = 3; i < arguments.length; i++) {
-      childrenArray.push(arguments[i])
+      const child: Vnode = arguments[i]
+      if (Array.isArray(child) && child.type !== Fragment) {
+        const tempProps: object = { children: child }
+        const tempVnode = createVnode(Fragment, tempProps, null, null, null)
+        childrenArray.push(tempVnode)
+      } else {
+        childrenArray.push(child)
+      }
     }
   }
   // ??? 恶心，解决办法？
   if (childrenText && !type) {
     return createVnode(null, null, childrenText, null, null)
   } else {
-    props.children = childrenArray as Array<Vnode> || []
+    props.children = childrenArray as Array<Vnode>
   }
   if (type != null && (type as Component).defaultProps != null) {
     for (let i in (type as Component).defaultProps) {
