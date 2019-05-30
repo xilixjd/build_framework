@@ -42,6 +42,14 @@ interface IndexVnodeDict {
 
 type Render = () => Vnode|null
 
+class EventProcess {
+  static asyncProcess: boolean = false
+  static dirtyComponent: Array<Component> = []
+  static enqueueUpdate(c: Component): void {
+    if (this.asyncProcess) this.dirtyComponent.push(c)
+  }
+}
+
 class Component {
   componentWillMount?: Function
   render?: Function
@@ -85,6 +93,9 @@ class Component {
   setState(state: object|Function, callback: Function):void {
     if (callback) {
       this._renderCallbacks.push(callback)
+    }
+    if (EventProcess.asyncProcess) {
+      EventProcess.enqueueUpdate(this)
     }
     if (this._isMergeState) {
       this._pendingStates.push(state)
