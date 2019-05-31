@@ -1,5 +1,5 @@
 // 难点1：diff 算法，diff 只能 diff div 等 vnode，当 diff 到相同 type 的 component，也是 diff 其 render() 结果
-// 难点2：setState 合并
+// 难点2：setState state 合并与事件中 setState 推入 dirtyComponent
 // 难点3：vnode 和 component 的关系
 // 难点4：_dirty 解决重复 setState 的问题
 // 难点5：diffChildren 时顺序变换的解决办法
@@ -96,8 +96,8 @@ class Component {
     }
     if (EventProcess.asyncProcess) {
       EventProcess.enqueueUpdate(this)
-    }
-    if (this._isMergeState) {
+      this._pendingStates.push(state)
+    } else if (this._isMergeState) {
       this._pendingStates.push(state)
     } else {
       this.forceUpdate(false)
@@ -469,7 +469,10 @@ function applyRef(ref: Function|null, value: ExpandElement|Component|null): void
 }
 
 function eventProxy(e) {
-  return this._listeners[e.type](e)
+  EventProcess.asyncProcess = true
+  // 触发事件回调函数
+  this._listeners[e.type](e)
+  EventProcess.asyncProcess = false
 }
 
 function unmount(vnode: Vnode):void {

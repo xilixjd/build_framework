@@ -1,7 +1,9 @@
 // 难点1：diff 算法，diff 只能 diff div 等 vnode，当 diff 到相同 type 的 component，也是 diff 其 render() 结果
-// 难点2：setState 合并
+// 难点2：setState state 合并与事件中 setState 推入 dirtyComponent
 // 难点3：vnode 和 component 的关系
 // 难点4：_dirty 解决重复 setState 的问题
+// 难点5：diffChildren 时顺序变换的解决办法
+// 难点6：render 后是全新的 vnode 怎么保证组件的复用
 var __assign = (this && this.__assign) || function () {
     __assign = Object.assign || function(t) {
         for (var s, i = 1, n = arguments.length; i < n; i++) {
@@ -13,6 +15,17 @@ var __assign = (this && this.__assign) || function () {
     };
     return __assign.apply(this, arguments);
 };
+var EventProcess = /** @class */ (function () {
+    function EventProcess() {
+    }
+    EventProcess.enqueueUpdate = function (c) {
+        if (this.asyncProcess)
+            this.dirtyComponent.push(c);
+    };
+    EventProcess.asyncProcess = false;
+    EventProcess.dirtyComponent = [];
+    return EventProcess;
+}());
 var Component = /** @class */ (function () {
     function Component(props, context) {
         this.props = props || {};
@@ -28,6 +41,29 @@ var Component = /** @class */ (function () {
         this.defaultProps = null;
     }
     Component.prototype.setState = function (state, callback) {
+        if (callback) {
+            this._renderCallbacks.push(callback);
+        }
+        if (EventProcess.asyncProcess) {
+            EventProcess.enqueueUpdate(this);
+        }
+        if (this._isMergeState) {
+            this._pendingStates.push(state);
+        }
+        else {
+            this.forceUpdate(false);
+        }
+    };
+    Component.prototype.forceUpdate = function (callback) {
+        var force = callback !== false;
+        var mounts = [];
+        var vnode = this._vnode;
+        var parentDom = vnode._dom.parentElement;
+        diff(parentDom, vnode, vnode, this.context, mounts, force);
+        callDidmount(mounts);
+        if (typeof callback === 'function') {
+            callback();
+        }
     };
     Component.prototype._mergeState = function (nextProps, nextContext) {
         var length = this._pendingStates.length;
@@ -172,7 +208,6 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
         else {
             if (newVnodeType.prototype.render) {
                 // class组件
-                // ??? new (newVnodeType as any) 有办法不这么写吗
                 c = newVnode._component = new newVnodeType(newVnode.props, context);
             }
             else {
@@ -362,7 +397,10 @@ function applyRef(ref, value) {
         ref(value);
 }
 function eventProxy(e) {
-    return this._listeners[e.type](e);
+    EventProcess.asyncProcess = true;
+    // 触发事件回调函数
+    this._listeners[e.type](e);
+    EventProcess.asyncProcess = false;
 }
 function unmount(vnode) {
     if (vnode.ref) {
@@ -377,7 +415,7 @@ function unmount(vnode) {
     }
     vnode._dom = null;
     var component = vnode._component;
-    if (component && vnode.type.prototype.componentWillUnmount) {
+    if (component && component.componentWillUnmount) {
         component.componentWillUnmount();
         if (component._prevVnode)
             unmount(component._prevVnode);
