@@ -53,7 +53,6 @@ var Component = /** @class */ (function () {
         this._dirty = true;
         this._vnode = null;
         this._prevVnode = null;
-        this._componentDom = null;
         this._renderOrder = null;
         this.defaultProps = null;
     }
@@ -158,7 +157,7 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
             // 如有一个组件有 componentDidMount 且被调换顺序，则每次调换都会触发 componentDidMount
             // 这与react16一致，而 preact 不是
             if (oldIndex < newChildMaxIndex) {
-                newChildDom = diff(parentDom, newChild, null, context, mounts, false);
+                newChildDom = diff(parentDom, newChild, null, context, mounts, null);
                 if (newChildDom) {
                     if (nextInsertDom) {
                         parentDom.insertBefore(newChildDom, nextInsertDom);
@@ -172,13 +171,13 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
             else {
                 nextInsertDom = oldChildDom && oldChildDom.nextSibling;
                 // 不需要这个 dom 返回值
-                diff(parentDom, newChild, oldChild, context, mounts, false);
+                diff(parentDom, newChild, oldChild, context, mounts, null);
                 newChildMaxIndex = oldIndex;
             }
             delete oldKeyObject[newKey];
         }
         else {
-            newChildDom = diff(parentDom, newChild, null, context, mounts, false);
+            newChildDom = diff(parentDom, newChild, null, context, mounts, null);
             if (newChildDom) {
                 if (nextInsertDom) {
                     parentDom.insertBefore(newChildDom, nextInsertDom);

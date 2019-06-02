@@ -46,8 +46,15 @@
         this.setState({
           num: this.state.num + 1
         })
-        debugger
         this.props.callback()
+      }
+      componentWillReceiveProps() {
+        this.setState({
+          flag: !this.state.flag
+        })
+        this.setState({
+          num: this.state.num + 1
+        })
       }
       render() {
         return (

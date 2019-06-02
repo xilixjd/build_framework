@@ -89,7 +89,6 @@ class Component {
   _pendingStates: Array<object|Function>
   _dirty: boolean
   _vnode: Vnode|null
-  _componentDom: ExpandElement|null
   _prevVnode: Vnode|null
   _renderOrder: number|null
   defaultProps: any
@@ -102,7 +101,6 @@ class Component {
     this._dirty = true
     this._vnode = null
     this._prevVnode = null
-    this._componentDom = null
     this._renderOrder = null
     this.defaultProps = null
   }
@@ -151,22 +149,6 @@ class Component {
     }
     return nextState
   }
-
-  // componentWillMount():void {}
-  // render(props: Props, state: object, context: object):Vnode {
-  //   return createVnode(null, null, null, null, null)
-  // }
-  // componentDidMount():void {}
-
-  // getDerivedStateFromProps(props?: Props, state?: object):object { return {} }
-  // componentWillReceiveProps(props?: Props, context?: object):void {}
-  // shouldComponentUpdate(props?: Props, state?: object, context?: object):boolean { return true }
-  // componentWillUpdate(props?: Props, state?: object, context?: object):void {}
-  // getSnapshotBeforeUpdate(props?: Props, state?: object): any {}
-  // componentDidUpdate(props?: Props, state?: object, snapShot?: any):void {}
-  // componentWillUnmount():void {}
-
-  // getChildContext(): object { return {} }
 }
 
 const EMPTY_OBJ = {}
@@ -230,7 +212,7 @@ function diffChildren(
       // 如有一个组件有 componentDidMount 且被调换顺序，则每次调换都会触发 componentDidMount
       // 这与react16一致，而 preact 不是
       if (oldIndex < newChildMaxIndex) {
-        newChildDom = diff(parentDom, newChild, null, context, mounts, false)
+        newChildDom = diff(parentDom, newChild, null, context, mounts, null)
         if (newChildDom) {
           if (nextInsertDom) {
             parentDom.insertBefore(newChildDom, nextInsertDom)
@@ -242,12 +224,12 @@ function diffChildren(
       } else {
         nextInsertDom = oldChildDom && oldChildDom.nextSibling
         // 不需要这个 dom 返回值
-        diff(parentDom, newChild, oldChild, context, mounts, false)
+        diff(parentDom, newChild, oldChild, context, mounts, null)
         newChildMaxIndex = oldIndex
       }
       delete oldKeyObject[newKey]
     } else {
-      newChildDom = diff(parentDom, newChild, null, context, mounts, false)
+      newChildDom = diff(parentDom, newChild, null, context, mounts, null)
       if (newChildDom) {
         if (nextInsertDom) {
           parentDom.insertBefore(newChildDom, nextInsertDom)
