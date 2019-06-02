@@ -1,9 +1,10 @@
 // 难点1：diff 算法，diff 只能 diff div 等 vnode，当 diff 到相同 type 的 component，也是 diff 其 render() 结果
-// 难点2：setState state 合并与事件中 setState 推入 dirtyComponent
+// 难点2：setState state 合并与事件中 setState 推入 dirtyComponents
 // 难点3：vnode 和 component 的关系
 // 难点4：_dirty 解决重复 setState 的问题
 // 难点5：diffChildren 时顺序变换的解决办法
 // 难点6：render 后是全新的 vnode 怎么保证组件的复用
+// 难点7：preact setState 调换导致生命周期不一致
 
 interface ExpandElement extends Element {
   // select multiple
@@ -42,11 +43,27 @@ interface IndexVnodeDict {
 
 type Render = () => Vnode|null
 
-class EventProcess {
+class UpdateProcess {
   static asyncProcess: boolean = false
-  static dirtyComponent: Array<Component> = []
+  static dirtyComponents: Array<Component> = []
+  static renderOrder: number = 0
   static enqueueUpdate(c: Component): void {
-    if (this.asyncProcess) this.dirtyComponent.push(c)
+    if (!c._dirty) {
+      c._dirty = true
+      this.dirtyComponents.push(c)
+    }
+  }
+  static flushUpdates(dirtyComponents?: Array<Component>): void {
+    dirtyComponents = dirtyComponents || this.dirtyComponents
+    // 从大到小排序
+    dirtyComponents.sort((a, b) => {
+      return b._renderOrder - a._renderOrder
+    })
+    let dc: Component
+    // 从父组件到子组件 render
+    while (dc = dirtyComponents.pop()) {
+      if (dc._dirty) dc.forceUpdate(false)
+    }
   }
 }
 
@@ -73,8 +90,8 @@ class Component {
   _dirty: boolean
   _vnode: Vnode|null
   _componentDom: ExpandElement|null
-  _isMergeState: boolean
   _prevVnode: Vnode|null
+  _renderOrder: number|null
   defaultProps: any
   constructor(props: Props, context: object) {
     this.props = props || {}
@@ -86,7 +103,7 @@ class Component {
     this._vnode = null
     this._prevVnode = null
     this._componentDom = null
-    this._isMergeState = false
+    this._renderOrder = null
     this.defaultProps = null
   }
 
@@ -94,11 +111,9 @@ class Component {
     if (callback) {
       this._renderCallbacks.push(callback)
     }
-    if (EventProcess.asyncProcess) {
-      EventProcess.enqueueUpdate(this)
-      this._pendingStates.push(state)
-    } else if (this._isMergeState) {
-      this._pendingStates.push(state)
+    this._pendingStates.push(state)
+    if (UpdateProcess.asyncProcess) {
+      UpdateProcess.enqueueUpdate(this)
     } else {
       this.forceUpdate(false)
     }
@@ -121,12 +136,12 @@ class Component {
     if (length === 0) {
       return this.state
     }
-    let pendingStates = this._pendingStates
+    let pendingStates: Array<object|Function> = [...this._pendingStates]
     this._pendingStates.length = 0
     let nextState = { ...this.state }
     for (let i = 0; i < length; i++) {
-      let state = pendingStates[i]
-      let tempState
+      let state: object|Function = pendingStates[i]
+      let tempState: object|Function
       if (typeof state === 'function') {
         tempState = state.call(this, nextState, nextProps, nextContext)
       } else {
@@ -160,12 +175,10 @@ const CAMEL_REG = /-?(?=[A-Z])/g
 
 function Fragment() {}
 
-let isMergeState: boolean = false
-
-function mergeMiddleware(func: Function, component: Component) {
-  component._isMergeState = true
+function updateMiddleware(func: Function, component: Component) {
+  UpdateProcess.asyncProcess = true
   func()
-  component._isMergeState = false
+  UpdateProcess.asyncProcess = false
 }
 
 function diffChildren(
@@ -220,7 +233,7 @@ function diffChildren(
         newChildDom = diff(parentDom, newChild, null, context, mounts, false)
         if (newChildDom) {
           if (nextInsertDom) {
-            document.insertBefore(newChildDom, nextInsertDom)
+            parentDom.insertBefore(newChildDom, nextInsertDom)
           } else {
             parentDom.appendChild(newChildDom)
           }
@@ -237,7 +250,7 @@ function diffChildren(
       newChildDom = diff(parentDom, newChild, null, context, mounts, false)
       if (newChildDom) {
         if (nextInsertDom) {
-          document.insertBefore(newChildDom, nextInsertDom)
+          parentDom.insertBefore(newChildDom, nextInsertDom)
         } else {
           parentDom.appendChild(newChildDom)
         }
@@ -269,10 +282,10 @@ function diff(
   const newVnodeType: any = newVnode.type
   if (newVnodeType === Fragment) {
     diffChildren(parentDom, newVnode, oldVnode, context, mounts)
+    if (Array.isArray(newVnode._children) && newVnode._children[0]) {
+      newVnode._dom = newVnode._children[0]._dom
+    }
     return null
-    // if (Array.isArray(newVnode._children) && newVnode._children[0]) {
-    //   return newVnode._children[0]._dom
-    // }
   } else if (typeof newVnodeType === 'function') {
     if (oldVnode && newVnodeType === oldVnode.type) {
       c = newVnode._component = oldVnode._component
@@ -287,11 +300,16 @@ function diff(
         c.render = (newVnodeType as Render)
       }
       isNew = true
+      if (c._renderOrder === null) {
+        c._renderOrder = ++UpdateProcess.renderOrder
+      }
     }
 
     oldProps = c.props
     oldState = c.state
     c._vnode = newVnode
+    // 为 getDerivedStateFromProps 和 componentWillUpdate 提供最新 state
+    c.state = c._mergeState(newVnode.props, context)
     if (c.getDerivedStateFromProps) {
       c.state = c.getDerivedStateFromProps(newVnode.props, c.state)
     }
@@ -300,7 +318,7 @@ function diff(
       if (!isStateless && !c.getDerivedStateFromProps
         && c.componentWillMount
       ) {
-        mergeMiddleware(() => {
+        updateMiddleware(() => {
           c.componentWillMount()
           // willMount 之后需要 mergeState
           // mergeState 只出现在有可能调用 setState 的情况下
@@ -311,13 +329,15 @@ function diff(
         mounts.push(c)
       }
     } else {
+      // 这里 force 来控制 componentWillReceiveProps 执行与否，当本组件 setState 并不执行 componentWillReceiveProps
       if (!isStateless && !c.getDerivedStateFromProps && force === null
         && c.componentWillReceiveProps
       ) {
-        c.componentWillReceiveProps(newVnode.props, context)
+        updateMiddleware(() => {
+          c.componentWillReceiveProps(newVnode.props, context)
+        }, c)
       }
-      // shouldComponentUpdate 要取到最新的 state
-      c.state = c._mergeState(newVnode.props, context)
+      // shouldComponentUpdate 和 componentWillUpdate 需要接受到 getDerivedStateFromProps 而来的新的 state
       if (!force && c.shouldComponentUpdate &&
         !c.shouldComponentUpdate(newVnode.props, c.state, context)
       ) {
@@ -329,6 +349,7 @@ function diff(
       if (c.componentWillUpdate) {
         c.componentWillUpdate(newVnode.props, c.state, context)
       }
+      c.state = c._mergeState(newVnode.props, context)
     }
     c.context = context
     c.props = newVnode.props
@@ -468,11 +489,12 @@ function applyRef(ref: Function|null, value: ExpandElement|Component|null): void
   if (typeof ref === 'function') ref(value)
 }
 
-function eventProxy(e) {
-  EventProcess.asyncProcess = true
+function eventProxy(e: Event) {
+  UpdateProcess.asyncProcess = true
   // 触发事件回调函数
   this._listeners[e.type](e)
-  EventProcess.asyncProcess = false
+  UpdateProcess.asyncProcess = false
+  UpdateProcess.flushUpdates()
 }
 
 function unmount(vnode: Vnode):void {
@@ -482,7 +504,7 @@ function unmount(vnode: Vnode):void {
 
   const dom = vnode._dom
   if (dom) {
-    const parentDom = (dom as ExpandElement).parentDom
+    const parentDom: ExpandElement = dom.parentElement
     if (parentDom) {
       parentDom.removeChild(dom)
     }
@@ -539,7 +561,7 @@ function createElement(
   } else if (typeof children === 'number') {
     childrenText = children + ''
   }
-  let childrenArray = Array.isArray(children) ? children : (children ? [children] : [])
+  let childrenArray = Array.isArray(children) ? children : (children != null ? [children] : [])
   if (!props) props = {}
 
   if (arguments.length > 3) {

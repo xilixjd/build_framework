@@ -8,16 +8,28 @@
     class App1 extends React.Component {
       constructor(props) {
         super(props)
+        this.state = {
+          num: 0,
+        }
       }
       componentDidMount() {
         console.log(1)
       }
+      callback = () => {
+        this.setState({
+          num: this.state.num + 1
+        })
+      }
       render() {
         return (
-          <div>1</div>
+          <div>
+            <div>{this.state.num}</div>
+            <App callback={this.callback}/>
+          </div>
         )
       }
     }
+
     class App extends React.Component {
       constructor(props) {
         super(props)
@@ -28,10 +40,14 @@
         }
       }
       click() {
-        console.log('click')
         this.setState({
           flag: !this.state.flag
         })
+        this.setState({
+          num: this.state.num + 1
+        })
+        debugger
+        this.props.callback()
       }
       render() {
         return (
@@ -40,13 +56,13 @@
             {
               this.state.flag ?
               [<div>2</div>,
-              <App1/>]
+              <div>1</div>]
               :
-              [<App1/>,
+              [<div>1</div>,
               <div>2</div>]
             }
             <div>{[1,2]}</div>
-            <div>4</div>
+            <div>{this.state.num}</div>
           </div>
         )
       }
@@ -54,7 +70,7 @@
 
     window.onload = function(){
       var s = ReactDOM.render(
-      <App />, document.getElementById('example'))
+      <App1 />, document.getElementById('example'))
     }
   </script>
 </head>

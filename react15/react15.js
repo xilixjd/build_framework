@@ -1,9 +1,10 @@
 // 难点1：diff 算法，diff 只能 diff div 等 vnode，当 diff 到相同 type 的 component，也是 diff 其 render() 结果
-// 难点2：setState state 合并与事件中 setState 推入 dirtyComponent
+// 难点2：setState state 合并与事件中 setState 推入 dirtyComponents
 // 难点3：vnode 和 component 的关系
 // 难点4：_dirty 解决重复 setState 的问题
 // 难点5：diffChildren 时顺序变换的解决办法
 // 难点6：render 后是全新的 vnode 怎么保证组件的复用
+// 难点7：preact setState 调换导致生命周期不一致
 var __assign = (this && this.__assign) || function () {
     __assign = Object.assign || function(t) {
         for (var s, i = 1, n = arguments.length; i < n; i++) {
@@ -15,16 +16,32 @@ var __assign = (this && this.__assign) || function () {
     };
     return __assign.apply(this, arguments);
 };
-var EventProcess = /** @class */ (function () {
-    function EventProcess() {
+var UpdateProcess = /** @class */ (function () {
+    function UpdateProcess() {
     }
-    EventProcess.enqueueUpdate = function (c) {
-        if (this.asyncProcess)
-            this.dirtyComponent.push(c);
+    UpdateProcess.enqueueUpdate = function (c) {
+        if (!c._dirty) {
+            c._dirty = true;
+            this.dirtyComponents.push(c);
+        }
     };
-    EventProcess.asyncProcess = false;
-    EventProcess.dirtyComponent = [];
-    return EventProcess;
+    UpdateProcess.flushUpdates = function (dirtyComponents) {
+        dirtyComponents = dirtyComponents || this.dirtyComponents;
+        // 从大到小排序
+        dirtyComponents.sort(function (a, b) {
+            return b._renderOrder - a._renderOrder;
+        });
+        var dc;
+        // 从父组件到子组件 render
+        while (dc = dirtyComponents.pop()) {
+            if (dc._dirty)
+                dc.forceUpdate(false);
+        }
+    };
+    UpdateProcess.asyncProcess = false;
+    UpdateProcess.dirtyComponents = [];
+    UpdateProcess.renderOrder = 0;
+    return UpdateProcess;
 }());
 var Component = /** @class */ (function () {
     function Component(props, context) {
@@ -37,18 +54,16 @@ var Component = /** @class */ (function () {
         this._vnode = null;
         this._prevVnode = null;
         this._componentDom = null;
-        this._isMergeState = false;
+        this._renderOrder = null;
         this.defaultProps = null;
     }
     Component.prototype.setState = function (state, callback) {
         if (callback) {
             this._renderCallbacks.push(callback);
         }
-        if (EventProcess.asyncProcess) {
-            EventProcess.enqueueUpdate(this);
-        }
-        if (this._isMergeState) {
-            this._pendingStates.push(state);
+        this._pendingStates.push(state);
+        if (UpdateProcess.asyncProcess) {
+            UpdateProcess.enqueueUpdate(this);
         }
         else {
             this.forceUpdate(false);
@@ -70,7 +85,7 @@ var Component = /** @class */ (function () {
         if (length === 0) {
             return this.state;
         }
-        var pendingStates = this._pendingStates;
+        var pendingStates = this._pendingStates.slice();
         this._pendingStates.length = 0;
         var nextState = __assign({}, this.state);
         for (var i = 0; i < length; i++) {
@@ -92,11 +107,10 @@ var EMPTY_OBJ = {};
 var EMPTY_ARRAY = [];
 var CAMEL_REG = /-?(?=[A-Z])/g;
 function Fragment() { }
-var isMergeState = false;
-function mergeMiddleware(func, component) {
-    component._isMergeState = true;
+function updateMiddleware(func, component) {
+    UpdateProcess.asyncProcess = true;
     func();
-    component._isMergeState = false;
+    UpdateProcess.asyncProcess = false;
 }
 function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts) {
     var newChildren = newParentVnode._children;
@@ -147,7 +161,7 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
                 newChildDom = diff(parentDom, newChild, null, context, mounts, false);
                 if (newChildDom) {
                     if (nextInsertDom) {
-                        document.insertBefore(newChildDom, nextInsertDom);
+                        parentDom.insertBefore(newChildDom, nextInsertDom);
                     }
                     else {
                         parentDom.appendChild(newChildDom);
@@ -167,7 +181,7 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
             newChildDom = diff(parentDom, newChild, null, context, mounts, false);
             if (newChildDom) {
                 if (nextInsertDom) {
-                    document.insertBefore(newChildDom, nextInsertDom);
+                    parentDom.insertBefore(newChildDom, nextInsertDom);
                 }
                 else {
                     parentDom.appendChild(newChildDom);
@@ -196,10 +210,10 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
     var newVnodeType = newVnode.type;
     if (newVnodeType === Fragment) {
         diffChildren(parentDom, newVnode, oldVnode, context, mounts);
+        if (Array.isArray(newVnode._children) && newVnode._children[0]) {
+            newVnode._dom = newVnode._children[0]._dom;
+        }
         return null;
-        // if (Array.isArray(newVnode._children) && newVnode._children[0]) {
-        //   return newVnode._children[0]._dom
-        // }
     }
     else if (typeof newVnodeType === 'function') {
         if (oldVnode && newVnodeType === oldVnode.type) {
@@ -217,17 +231,22 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
                 c.render = newVnodeType;
             }
             isNew = true;
+            if (c._renderOrder === null) {
+                c._renderOrder = ++UpdateProcess.renderOrder;
+            }
         }
         oldProps = c.props;
         oldState = c.state;
         c._vnode = newVnode;
+        // 为 getDerivedStateFromProps 和 componentWillUpdate 提供最新 state
+        c.state = c._mergeState(newVnode.props, context);
         if (c.getDerivedStateFromProps) {
             c.state = c.getDerivedStateFromProps(newVnode.props, c.state);
         }
         if (isNew) {
             if (!isStateless && !c.getDerivedStateFromProps
                 && c.componentWillMount) {
-                mergeMiddleware(function () {
+                updateMiddleware(function () {
                     c.componentWillMount();
                     // willMount 之后需要 mergeState
                     // mergeState 只出现在有可能调用 setState 的情况下
@@ -239,12 +258,14 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
             }
         }
         else {
+            // 这里 force 来控制 componentWillReceiveProps 执行与否，当本组件 setState 并不执行 componentWillReceiveProps
             if (!isStateless && !c.getDerivedStateFromProps && force === null
                 && c.componentWillReceiveProps) {
-                c.componentWillReceiveProps(newVnode.props, context);
+                updateMiddleware(function () {
+                    c.componentWillReceiveProps(newVnode.props, context);
+                }, c);
             }
-            // shouldComponentUpdate 要取到最新的 state
-            c.state = c._mergeState(newVnode.props, context);
+            // shouldComponentUpdate 和 componentWillUpdate 需要接受到 getDerivedStateFromProps 而来的新的 state
             if (!force && c.shouldComponentUpdate &&
                 !c.shouldComponentUpdate(newVnode.props, c.state, context)) {
                 var p = void 0;
@@ -256,6 +277,7 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
             if (c.componentWillUpdate) {
                 c.componentWillUpdate(newVnode.props, c.state, context);
             }
+            c.state = c._mergeState(newVnode.props, context);
         }
         c.context = context;
         c.props = newVnode.props;
@@ -397,10 +419,11 @@ function applyRef(ref, value) {
         ref(value);
 }
 function eventProxy(e) {
-    EventProcess.asyncProcess = true;
+    UpdateProcess.asyncProcess = true;
     // 触发事件回调函数
     this._listeners[e.type](e);
-    EventProcess.asyncProcess = false;
+    UpdateProcess.asyncProcess = false;
+    UpdateProcess.flushUpdates();
 }
 function unmount(vnode) {
     if (vnode.ref) {
@@ -408,7 +431,7 @@ function unmount(vnode) {
     }
     var dom = vnode._dom;
     if (dom) {
-        var parentDom = dom.parentDom;
+        var parentDom = dom.parentElement;
         if (parentDom) {
             parentDom.removeChild(dom);
         }
@@ -462,7 +485,7 @@ function createElement(type, props, children) {
     else if (typeof children === 'number') {
         childrenText = children + '';
     }
-    var childrenArray = Array.isArray(children) ? children : (children ? [children] : []);
+    var childrenArray = Array.isArray(children) ? children : (children != null ? [children] : []);
     if (!props)
         props = {};
     if (arguments.length > 3) {
