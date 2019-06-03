@@ -65,6 +65,11 @@ class UpdateProcess {
       if (dc._dirty) dc.forceUpdate(false)
     }
   }
+  static updateMiddleware(func: Function, component: Component) {
+    UpdateProcess.asyncProcess = true
+    func()
+    UpdateProcess.asyncProcess = false
+  }
 }
 
 class Component {
@@ -156,12 +161,6 @@ const EMPTY_ARRAY = []
 const CAMEL_REG = /-?(?=[A-Z])/g
 
 function Fragment() {}
-
-function updateMiddleware(func: Function, component: Component) {
-  UpdateProcess.asyncProcess = true
-  func()
-  UpdateProcess.asyncProcess = false
-}
 
 function diffChildren(
   parentDom: ExpandElement|Text, newParentVnode: Vnode, oldParentVnode: Vnode|null,
@@ -291,7 +290,7 @@ function diff(
     oldState = c.state
     c._vnode = newVnode
     // 为 getDerivedStateFromProps 和 componentWillUpdate 提供最新 state
-    c.state = c._mergeState(newVnode.props, context)
+    // c.state = c._mergeState(newVnode.props, context)
     if (c.getDerivedStateFromProps) {
       c.state = c.getDerivedStateFromProps(newVnode.props, c.state)
     }
@@ -300,7 +299,7 @@ function diff(
       if (!isStateless && !c.getDerivedStateFromProps
         && c.componentWillMount
       ) {
-        updateMiddleware(() => {
+        UpdateProcess.updateMiddleware(() => {
           c.componentWillMount()
           // willMount 之后需要 mergeState
           // mergeState 只出现在有可能调用 setState 的情况下
@@ -315,7 +314,7 @@ function diff(
       if (!isStateless && !c.getDerivedStateFromProps && force === null
         && c.componentWillReceiveProps
       ) {
-        updateMiddleware(() => {
+        UpdateProcess.updateMiddleware(() => {
           c.componentWillReceiveProps(newVnode.props, context)
         }, c)
       }
@@ -592,7 +591,9 @@ function createVnode(
 function callDidmount(mounts: Array<Component>):void {
   let c: Component
   while (c = mounts.pop()) {
-    c.componentDidMount()
+    UpdateProcess.updateMiddleware(() => {
+      c.componentDidMount()
+    }, c)
   }
 }
 

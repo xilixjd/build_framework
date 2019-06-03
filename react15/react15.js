@@ -38,6 +38,11 @@ var UpdateProcess = /** @class */ (function () {
                 dc.forceUpdate(false);
         }
     };
+    UpdateProcess.updateMiddleware = function (func, component) {
+        UpdateProcess.asyncProcess = true;
+        func();
+        UpdateProcess.asyncProcess = false;
+    };
     UpdateProcess.asyncProcess = false;
     UpdateProcess.dirtyComponents = [];
     UpdateProcess.renderOrder = 0;
@@ -106,11 +111,6 @@ var EMPTY_OBJ = {};
 var EMPTY_ARRAY = [];
 var CAMEL_REG = /-?(?=[A-Z])/g;
 function Fragment() { }
-function updateMiddleware(func, component) {
-    UpdateProcess.asyncProcess = true;
-    func();
-    UpdateProcess.asyncProcess = false;
-}
 function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts) {
     var newChildren = newParentVnode._children;
     if (!newChildren) {
@@ -238,14 +238,14 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
         oldState = c.state;
         c._vnode = newVnode;
         // 为 getDerivedStateFromProps 和 componentWillUpdate 提供最新 state
-        c.state = c._mergeState(newVnode.props, context);
+        // c.state = c._mergeState(newVnode.props, context)
         if (c.getDerivedStateFromProps) {
             c.state = c.getDerivedStateFromProps(newVnode.props, c.state);
         }
         if (isNew) {
             if (!isStateless && !c.getDerivedStateFromProps
                 && c.componentWillMount) {
-                updateMiddleware(function () {
+                UpdateProcess.updateMiddleware(function () {
                     c.componentWillMount();
                     // willMount 之后需要 mergeState
                     // mergeState 只出现在有可能调用 setState 的情况下
@@ -260,7 +260,7 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
             // 这里 force 来控制 componentWillReceiveProps 执行与否，当本组件 setState 并不执行 componentWillReceiveProps
             if (!isStateless && !c.getDerivedStateFromProps && force === null
                 && c.componentWillReceiveProps) {
-                updateMiddleware(function () {
+                UpdateProcess.updateMiddleware(function () {
                     c.componentWillReceiveProps(newVnode.props, context);
                 }, c);
             }
@@ -531,8 +531,11 @@ function createVnode(type, props, text, key, ref) {
 function callDidmount(mounts) {
     var c;
     while (c = mounts.pop()) {
-        c.componentDidMount();
+        UpdateProcess.updateMiddleware(function () {
+            c.componentDidMount();
+        }, c);
     }
+    UpdateProcess.flushUpdates()
 }
 function render(vnode, parentDom) {
     var mounts = [];
