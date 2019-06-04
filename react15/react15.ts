@@ -353,6 +353,9 @@ function diff(
     if (newVnode.ref) applyRef(newVnode.ref, c)
   } else {
     dom = diffElementNodes(newVnode, oldVnode, context, mounts)
+    if (newVnode.ref && (!oldVnode || (oldVnode.ref !== newVnode.ref))) {
+      applyRef(newVnode.ref, dom)
+    }
   }
 
   newVnode._dom = dom
@@ -466,7 +469,7 @@ function setProperty(dom: ExpandElement, propKey: string, value: any, oldValue: 
   }
 }
 
-function applyRef(ref: Function|null, value: ExpandElement|Component|null): void {
+function applyRef(ref: Function|null, value: ExpandElement|Text|Component|null): void {
   if (typeof ref === 'function') ref(value)
 }
 
@@ -550,7 +553,7 @@ function createElement(
       const child: Vnode = arguments[i]
       if (Array.isArray(child) && child.type !== Fragment) {
         const tempProps: object = { children: child }
-        const tempVnode = createVnode(Fragment, tempProps, null, null, null)
+        const tempVnode = createVnode(Fragment, tempProps, null, props.key, props.ref)
         childrenArray.push(tempVnode)
       } else {
         childrenArray.push(child)
@@ -559,7 +562,7 @@ function createElement(
   }
   // ??? 恶心，解决办法？
   if (childrenText && !type) {
-    return createVnode(null, null, childrenText, null, null)
+    return createVnode(null, null, childrenText, null, props.ref)
   } else {
     props.children = childrenArray as Array<Vnode>
   }
@@ -568,7 +571,7 @@ function createElement(
       if (props[i] === undefined) props[i] = (type as Component).defaultProps[i]
     }
   }
-  return createVnode(type, props, null, props.key, null)
+  return createVnode(type, props, null, props.key, props.ref)
 }
 
 function createVnode(
@@ -595,6 +598,7 @@ function callDidmount(mounts: Array<Component>):void {
       c.componentDidMount()
     }, c)
   }
+  UpdateProcess.flushUpdates()
 }
 
 function render(vnode: Vnode, parentDom: ExpandElement) {

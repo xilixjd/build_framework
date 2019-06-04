@@ -296,6 +296,9 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
     }
     else {
         dom = diffElementNodes(newVnode, oldVnode, context, mounts);
+        if (newVnode.ref && (!oldVnode || (oldVnode.ref !== newVnode.ref))) {
+            applyRef(newVnode.ref, dom);
+        }
     }
     newVnode._dom = dom;
     if (c) {
@@ -492,7 +495,7 @@ function createElement(type, props, children) {
             var child = arguments[i];
             if (Array.isArray(child) && child.type !== Fragment) {
                 var tempProps = { children: child };
-                var tempVnode = createVnode(Fragment, tempProps, null, null, null);
+                var tempVnode = createVnode(Fragment, tempProps, null, props.key, props.ref);
                 childrenArray.push(tempVnode);
             }
             else {
@@ -502,7 +505,7 @@ function createElement(type, props, children) {
     }
     // ??? 恶心，解决办法？
     if (childrenText && !type) {
-        return createVnode(null, null, childrenText, null, null);
+        return createVnode(null, null, childrenText, null, props.ref);
     }
     else {
         props.children = childrenArray;
@@ -513,7 +516,7 @@ function createElement(type, props, children) {
                 props[i] = type.defaultProps[i];
         }
     }
-    return createVnode(type, props, null, props.key, null);
+    return createVnode(type, props, null, props.key, props.ref);
 }
 function createVnode(type, props, text, key, ref) {
     var vnode = {
@@ -535,7 +538,7 @@ function callDidmount(mounts) {
             c.componentDidMount();
         }, c);
     }
-    UpdateProcess.flushUpdates()
+    UpdateProcess.flushUpdates();
 }
 function render(vnode, parentDom) {
     var mounts = [];
