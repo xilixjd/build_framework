@@ -25,14 +25,14 @@ interface Props {
   [propName: string]: any
 }
 interface Vnode {
-  type: Component|Function|string|null
+  type: Component|Function|string|null // 可能是组件，无状态组件，浏览器节点
   props: Props|null
-  text: string|null
+  text: string|null // 只用于文本节点
   key: string|null
   ref: Function|null
-  _children: Array<Vnode>|null
-  _dom: ExpandElement|Text|null
-  _component: Component|null // T extends Component ?
+  _children: Array<Vnode>|null // 子节点
+  _dom: ExpandElement|Text|null // vnode 对应的真实 dom
+  _component: Component|null // T extends Component ? vnode 对应的组件
 }
 interface IndexVnodeDict {
   [key:string]: {
@@ -44,15 +44,18 @@ interface IndexVnodeDict {
 type Render = () => Vnode|null
 
 class UpdateProcess {
-  static asyncProcess: boolean = false
-  static dirtyComponents: Array<Component> = []
-  static renderOrder: number = 0
+  static asyncProcess: boolean = false // 用于批量更新的标志
+  static dirtyComponents: Array<Component> = [] // 待（批量）更新的组件列表
+  static renderOrder: number = 0 // 用于记录组件渲染顺序的全局变量
+  // 待（批量）更新的组件入队
   static enqueueUpdate(c: Component): void {
+    // _dirty 为 true 标志表示是首次渲染或者已经加入了 dirtyComponents
     if (!c._dirty) {
       c._dirty = true
       this.dirtyComponents.push(c)
     }
   }
+  // 渲染 dirtyComponents
   static flushUpdates(dirtyComponents?: Array<Component>): void {
     dirtyComponents = dirtyComponents || this.dirtyComponents
     // 从大到小排序
@@ -65,6 +68,7 @@ class UpdateProcess {
       if (dc._dirty) dc.forceUpdate(false)
     }
   }
+  // 更新"中间件"
   static updateMiddleware(func: Function, component: Component) {
     UpdateProcess.asyncProcess = true
     func()
@@ -90,12 +94,12 @@ class Component {
   props: Props
   context: object
   state: object
-  _renderCallbacks: Array<Function>
-  _pendingStates: Array<object|Function>
-  _dirty: boolean
-  _vnode: Vnode|null
-  _prevVnode: Vnode|null
-  _renderOrder: number|null
+  _renderCallbacks: Array<Function>  // 收集 setState 中第二个参数
+  _pendingStates: Array<object|Function> // 收集 states
+  _dirty: boolean // 为批量更新服务的标志
+  _vnode: Vnode|null // 当前 vnode
+  _prevVnode: Vnode|null // 更新前的 vnode
+  _renderOrder: number|null // 渲染顺序，用于从父组件开始更新
   defaultProps: any
   constructor(props: Props, context: object) {
     this.props = props || {}
@@ -310,7 +314,8 @@ function diff(
         mounts.push(c)
       }
     } else {
-      // 这里 force 来控制 componentWillReceiveProps 执行与否，当本组件 setState 并不执行 componentWillReceiveProps
+      // 这里 force 来控制 componentWillReceiveProps 执行与否，当本组件 setState 时
+      // 并不执行 componentWillReceiveProps
       if (!isStateless && !c.getDerivedStateFromProps && force === null
         && c.componentWillReceiveProps
       ) {
@@ -318,7 +323,8 @@ function diff(
           c.componentWillReceiveProps(newVnode.props, context)
         }, c)
       }
-      // shouldComponentUpdate 和 componentWillUpdate 需要接受到 getDerivedStateFromProps 而来的新的 state
+      // shouldComponentUpdate 和 componentWillUpdate 需要接受到 getDerivedStateFromProps
+      // 而来的新的 state
       if (!force && c.shouldComponentUpdate &&
         !c.shouldComponentUpdate(newVnode.props, c.state, context)
       ) {
@@ -404,7 +410,7 @@ function diffElementNodes(
 
 function diffProps(dom: ExpandElement, newProps: Props, oldProps: Props) {
   for (let propKey in newProps) {
-    if (propKey !== 'children' && propKey !== 'key') {
+    if (propKey !== 'children' && propKey !== 'key' && propKey !== 'ref') {
       if (!oldProps[propKey]) {
         setProperty(dom, propKey, newProps[propKey], oldProps[propKey])
       } else if (propKey === 'value' || propKey === 'checked') {
