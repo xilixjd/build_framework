@@ -119,6 +119,7 @@ class Component {
       this._renderCallbacks.push(callback)
     }
     this._pendingStates.push(state)
+    // 批量更新
     if (UpdateProcess.asyncProcess) {
       UpdateProcess.enqueueUpdate(this)
     } else {
@@ -126,6 +127,10 @@ class Component {
     }
   }
 
+  /**
+   * 不但用于组件的 forceUpdate 方法，还用来做直接渲染
+   * @param callback 直接渲染还是 forceUpdate 的标志
+   */
   forceUpdate(callback: Function|boolean) {
     const force: boolean = callback !== false
     let mounts: Array<Component> = []
@@ -138,7 +143,12 @@ class Component {
     }
   }
 
-  _mergeState(nextProps, nextContext) {
+  /**
+   * 合并 _pendingStates
+   * @param nextProps 
+   * @param nextContext 
+   */
+  _mergeState(nextProps: Props, nextContext: object) {
     const length = this._pendingStates.length
     if (length === 0) {
       return this.state
@@ -328,7 +338,7 @@ function diff(
       if (!force && c.shouldComponentUpdate &&
         !c.shouldComponentUpdate(newVnode.props, c.state, context)
       ) {
-        let p
+        let p: Function
         while (p = c._renderCallbacks.pop()) p.call(c)
         c._dirty = false
         return oldVnode._dom || null
@@ -513,7 +523,11 @@ function unmount(vnode: Vnode):void {
   }
 }
 
-function toChildArray(children: Array<Vnode>|string):Array<Vnode> {
+/**
+ * 将 vnode._children 转换成数组形式的 vnode
+ * @param children 
+ */
+function toChildArray(children: Array<Vnode>|string): Array<Vnode> {
   if (Array.isArray(children)) {
     let resultChildren:Array<Vnode> = []
     for (let i = 0; i < children.length; i++) {
@@ -543,7 +557,7 @@ function coerceToVnode(vnode: Vnode|null) {
 
 function createElement(
   type: Component|Function|string|null,
-  props: Props|null, children: Array<Vnode>|Vnode|string|number
+  props: Props|null, children?: Array<Vnode>|Vnode|string|number
 ):Vnode {
   let childrenText: string = null
   if (typeof children === 'string') {
@@ -559,7 +573,7 @@ function createElement(
       const child: Vnode = arguments[i]
       if (Array.isArray(child) && child.type !== Fragment) {
         const tempProps: object = { children: child }
-        const tempVnode = createVnode(Fragment, tempProps, null, props.key, props.ref)
+        const tempVnode = createVnode(Fragment, tempProps, null, props.key, null)
         childrenArray.push(tempVnode)
       } else {
         childrenArray.push(child)
