@@ -208,7 +208,12 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
     // }
     var newVnodeType = newVnode.type;
     if (newVnodeType === Fragment) {
-        diffChildren(parentDom, newVnode, oldVnode, context, mounts);
+        if (oldVnode && (oldVnode.type === Fragment)) {
+            diffChildren(parentDom, newVnode, oldVnode, context, mounts);
+        } else {
+            debugger
+            diffChildren(parentDom, newVnode, null, context, mounts);
+        }
         if (Array.isArray(newVnode._children) && newVnode._children[0]) {
             newVnode._dom = newVnode._children[0]._dom;
         }
