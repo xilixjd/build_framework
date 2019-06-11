@@ -157,7 +157,7 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
             // 如有一个组件有 componentDidMount 且被调换顺序，则每次调换都会触发 componentDidMount
             // 这与react16一致，而 preact 不是
             if (oldIndex < newChildMaxIndex) {
-                newChildDom = diff(parentDom, newChild, null, context, mounts, null);
+                newChildDom = diff(parentDom, newChild, oldChildren[i], context, mounts, null);
                 if (newChildDom) {
                     if (nextInsertDom) {
                         parentDom.insertBefore(newChildDom, nextInsertDom);
@@ -177,7 +177,7 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
             delete oldKeyObject[newKey];
         }
         else {
-            newChildDom = diff(parentDom, newChild, null, context, mounts, null);
+            newChildDom = diff(parentDom, newChild, oldChildren[i], context, mounts, null);
             if (newChildDom) {
                 if (nextInsertDom) {
                     parentDom.insertBefore(newChildDom, nextInsertDom);
@@ -211,8 +211,9 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
         if (oldVnode && (oldVnode.type === Fragment)) {
             diffChildren(parentDom, newVnode, oldVnode, context, mounts);
         } else {
-            debugger
-            diffChildren(parentDom, newVnode, null, context, mounts);
+            var fakeVnode = oldVnode && createElement(Fragment, null, [oldVnode])
+            fakeVnode && (fakeVnode._children = toChildArray([oldVnode]))
+            diffChildren(parentDom, newVnode, fakeVnode, context, mounts);
         }
         if (Array.isArray(newVnode._children) && newVnode._children[0]) {
             newVnode._dom = newVnode._children[0]._dom;
