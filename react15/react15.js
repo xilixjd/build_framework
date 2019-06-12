@@ -19,12 +19,15 @@ var __assign = (this && this.__assign) || function () {
 var UpdateProcess = /** @class */ (function () {
     function UpdateProcess() {
     }
+    // 待（批量）更新的组件入队
     UpdateProcess.enqueueUpdate = function (c) {
+        // _dirty 为 true 标志表示是首次渲染或者已经加入了 dirtyComponents
         if (!c._dirty) {
             c._dirty = true;
             this.dirtyComponents.push(c);
         }
     };
+    // 渲染 dirtyComponents
     UpdateProcess.flushUpdates = function (dirtyComponents) {
         dirtyComponents = dirtyComponents || this.dirtyComponents;
         // 从大到小排序
@@ -38,14 +41,15 @@ var UpdateProcess = /** @class */ (function () {
                 dc.forceUpdate(false);
         }
     };
+    // 更新"中间件"
     UpdateProcess.updateMiddleware = function (func, component) {
         UpdateProcess.asyncProcess = true;
         func();
         UpdateProcess.asyncProcess = false;
     };
-    UpdateProcess.asyncProcess = false;
-    UpdateProcess.dirtyComponents = [];
-    UpdateProcess.renderOrder = 0;
+    UpdateProcess.asyncProcess = false; // 用于批量更新的标志
+    UpdateProcess.dirtyComponents = []; // 待（批量）更新的组件列表
+    UpdateProcess.renderOrder = 0; // 用于记录组件渲染顺序的全局变量
     return UpdateProcess;
 }());
 var Component = /** @class */ (function () {
@@ -66,6 +70,7 @@ var Component = /** @class */ (function () {
             this._renderCallbacks.push(callback);
         }
         this._pendingStates.push(state);
+        // 批量更新
         if (UpdateProcess.asyncProcess) {
             UpdateProcess.enqueueUpdate(this);
         }
@@ -73,6 +78,10 @@ var Component = /** @class */ (function () {
             this.forceUpdate(false);
         }
     };
+    /**
+     * 不但用于组件的 forceUpdate 方法，还用来做直接渲染
+     * @param callback 直接渲染还是 forceUpdate 的标志
+     */
     Component.prototype.forceUpdate = function (callback) {
         var force = callback !== false;
         var mounts = [];
@@ -84,6 +93,11 @@ var Component = /** @class */ (function () {
             callback();
         }
     };
+    /**
+     * 合并 _pendingStates
+     * @param nextProps
+     * @param nextContext
+     */
     Component.prototype._mergeState = function (nextProps, nextContext) {
         var length = this._pendingStates.length;
         if (length === 0) {
@@ -157,7 +171,7 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
             // 如有一个组件有 componentDidMount 且被调换顺序，则每次调换都会触发 componentDidMount
             // 这与react16一致，而 preact 不是
             if (oldIndex < newChildMaxIndex) {
-                newChildDom = diff(parentDom, newChild, oldChildren[i], context, mounts, null);
+                newChildDom = diff(parentDom, newChild, null, context, mounts, null);
                 if (newChildDom) {
                     if (nextInsertDom) {
                         parentDom.insertBefore(newChildDom, nextInsertDom);
@@ -177,7 +191,10 @@ function diffChildren(parentDom, newParentVnode, oldParentVnode, context, mounts
             delete oldKeyObject[newKey];
         }
         else {
-            newChildDom = diff(parentDom, newChild, oldChildren[i], context, mounts, null);
+            // newChild 不能为 type 是 Fragment 的情况，必须平摊掉 Fragment，因为这种情况下，
+            // newChildDom 为 null，diff 中的 newChild 找不到 oldChild.dom 来 insertBefore
+            // newChild 只会往最后插入
+            newChildDom = diff(parentDom, newChild, null, context, mounts, null);
             if (newChildDom) {
                 if (nextInsertDom) {
                     parentDom.insertBefore(newChildDom, nextInsertDom);
@@ -208,13 +225,7 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
     // }
     var newVnodeType = newVnode.type;
     if (newVnodeType === Fragment) {
-        if (oldVnode && (oldVnode.type === Fragment)) {
-            diffChildren(parentDom, newVnode, oldVnode, context, mounts);
-        } else {
-            var fakeVnode = oldVnode && createElement(Fragment, null, [oldVnode])
-            fakeVnode && (fakeVnode._children = toChildArray([oldVnode]))
-            diffChildren(parentDom, newVnode, fakeVnode, context, mounts);
-        }
+        diffChildren(parentDom, newVnode, oldVnode, context, mounts);
         if (Array.isArray(newVnode._children) && newVnode._children[0]) {
             newVnode._dom = newVnode._children[0]._dom;
         }
@@ -263,14 +274,16 @@ function diff(parentDom, newVnode, oldVnode, context, mounts, force) {
             }
         }
         else {
-            // 这里 force 来控制 componentWillReceiveProps 执行与否，当本组件 setState 并不执行 componentWillReceiveProps
+            // 这里 force 来控制 componentWillReceiveProps 执行与否，当本组件 setState 时
+            // 并不执行 componentWillReceiveProps
             if (!isStateless && !c.getDerivedStateFromProps && force === null
                 && c.componentWillReceiveProps) {
                 UpdateProcess.updateMiddleware(function () {
                     c.componentWillReceiveProps(newVnode.props, context);
                 }, c);
             }
-            // shouldComponentUpdate 和 componentWillUpdate 需要接受到 getDerivedStateFromProps 而来的新的 state
+            // shouldComponentUpdate 和 componentWillUpdate 需要接受到 getDerivedStateFromProps
+            // 而来的新的 state
             if (!force && c.shouldComponentUpdate &&
                 !c.shouldComponentUpdate(newVnode.props, c.state, context)) {
                 var p = void 0;
@@ -349,7 +362,7 @@ function diffElementNodes(newVnode, oldVnode, context, mounts) {
 }
 function diffProps(dom, newProps, oldProps) {
     for (var propKey in newProps) {
-        if (propKey !== 'children' && propKey !== 'key') {
+        if (propKey !== 'children' && propKey !== 'key' && propKey !== 'ref') {
             if (!oldProps[propKey]) {
                 setProperty(dom, propKey, newProps[propKey], oldProps[propKey]);
             }
@@ -457,32 +470,33 @@ function unmount(vnode) {
         }
     }
 }
+/**
+ * 将 vnode._children 转换成数组形式的 vnode
+ * @param children
+ */
 function toChildArray(children) {
     if (Array.isArray(children)) {
         var resultChildren = [];
         for (var i = 0; i < children.length; i++) {
-            if (typeof children[i] === 'string' || typeof children[i] === 'number') {
-                resultChildren.push(createElement(null, null, children[i]));
+            var child = children[i];
+            if (typeof child === 'string' || typeof child === 'number') {
+                resultChildren.push(createElement(null, null, child));
+            }
+            else if (child.type === Fragment) {
+                // 当 child.type 为 Fragment 的时候，需要将 child 平摊
+                var propsChildren = child.props.children;
+                if (propsChildren) {
+                    resultChildren = resultChildren.concat(toChildArray(propsChildren));
+                }
             }
             else {
-                resultChildren.push(children[i]);
+                resultChildren.push(child);
             }
         }
         return resultChildren.slice();
     }
     else {
         return [createElement(null, null, children)];
-    }
-}
-function coerceToVnode(vnode) {
-    if (!vnode || typeof vnode === 'boolean') {
-        return null;
-    }
-    if (typeof vnode === 'string' || typeof vnode === 'number') {
-        return createVnode(null, null, vnode + '', null, null);
-    }
-    if (Array.isArray(vnode)) {
-        return createElement(Fragment, null, vnode);
     }
 }
 function createElement(type, props, children) {
@@ -501,7 +515,7 @@ function createElement(type, props, children) {
             var child = arguments[i];
             if (Array.isArray(child) && child.type !== Fragment) {
                 var tempProps = { children: child };
-                var tempVnode = createVnode(Fragment, tempProps, null, props.key, props.ref);
+                var tempVnode = createVnode(Fragment, tempProps, null, props.key, null);
                 childrenArray.push(tempVnode);
             }
             else {

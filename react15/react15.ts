@@ -242,6 +242,9 @@ function diffChildren(
       }
       delete oldKeyObject[newKey]
     } else {
+      // newChild 不能为 type 是 Fragment 的情况，必须平摊掉 Fragment，因为这种情况下，
+      // newChildDom 为 null，diff 中的 newChild 找不到 oldChild.dom 来 insertBefore
+      // newChild 只会往最后插入
       newChildDom = diff(parentDom, newChild, null, context, mounts, null)
       if (newChildDom) {
         if (nextInsertDom) {
@@ -531,27 +534,22 @@ function toChildArray(children: Array<Vnode>|string): Array<Vnode> {
   if (Array.isArray(children)) {
     let resultChildren:Array<Vnode> = []
     for (let i = 0; i < children.length; i++) {
-      if (typeof children[i] === 'string' || typeof children[i] === 'number') {
-        resultChildren.push(createElement(null, null, children[i]))
+      const child = children[i]
+      if (typeof child === 'string' || typeof child === 'number') {
+        resultChildren.push(createElement(null, null, child))
+      } else if (child.type === Fragment) {
+        // 当 child.type 为 Fragment 的时候，需要将 child 平摊
+        const propsChildren = child.props.children
+        if (propsChildren) {
+          resultChildren = resultChildren.concat(toChildArray(propsChildren))
+        }
       } else {
-        resultChildren.push(children[i])
+        resultChildren.push(child)
       }
     }
     return [...resultChildren]
   } else {
     return [createElement(null, null, children)]
-  }
-}
-
-function coerceToVnode(vnode: Vnode|null) {
-  if (!vnode || typeof vnode === 'boolean') {
-    return null
-  }
-  if (typeof vnode === 'string' || typeof vnode === 'number') {
-    return createVnode(null, null, vnode + '', null, null)
-  }
-  if (Array.isArray(vnode)) {
-    return createElement(Fragment, null, vnode)
   }
 }
 
