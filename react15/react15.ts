@@ -233,14 +233,14 @@ function diffChildren(
             parentDom.appendChild(newChildDom)
           }
         }
-        newChildMaxIndex = oldIndex
+        // newChildMaxIndex = oldIndex
       } else {
         nextInsertDom = oldChildDom && oldChildDom.nextSibling
         // 不需要这个 dom 返回值
         diff(parentDom, newChild, oldChild, context, mounts, null)
         newChildMaxIndex = oldIndex
+        delete oldKeyObject[newKey]
       }
-      delete oldKeyObject[newKey]
     } else {
       // newChild 不能为 type 是 Fragment 的情况，必须平摊掉 Fragment，因为这种情况下，
       // newChildDom 为 null，diff 中的 newChild 找不到 oldChild.dom 来 insertBefore
