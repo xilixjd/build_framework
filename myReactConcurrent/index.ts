@@ -27,7 +27,7 @@ interface IFiber extends IElement {
   parent?: IFiber
   sibling?: IFiber
 
-  dom?: Element
+  dom?: HTMLElement
 
   time: number
 }
@@ -70,7 +70,7 @@ function createTextElement(text: string | number): IElement {
   }
 }
 
-function render(reactElement: IElement, dom: Element) {
+function render(reactElement: IElement, dom: HTMLElement) {
   const rootFiber = {
     dom,
     props: {
@@ -86,20 +86,85 @@ function createDom(fiber: IFiber) {
   if (typeof fiber.type !== 'string') {
     return null
   }
-  let dom: Element|Text
+  let dom: HTMLElement|Text
   if (fiber.type === TEXT_ELEMENT) {
     dom = document.createTextNode('')
   } else {
     dom = document.createElement(fiber.type)
   }
-  updateDomProps(dom, {}, fiber.props)
+  dom = updateDomProps(dom as HTMLElement, {}, fiber.props)
   return dom
 }
 
-function updateDomProps(dom, prevProps, nextProps) {
-  
+function updateDomProps(dom: HTMLElement, prevProps: IElementProps, nextProps: IElementProps) {
+  // 删掉新的有老的没有的 props
+  for (let name in prevProps) {
+    if (name === 'children') {
+      continue
+    }
+    const oldValue = prevProps[name]
+    const newValue = nextProps[name]
+    if (newValue == null) {
+      if (name.slice(0, 2) == 'on') {
+        const eventName = name.slice(2).toLowerCase()
+        dom.removeEventListener(eventName, oldValue as EventListenerOrEventListenerObject)
+      } else {
+        dom.removeAttribute(name)
+      }
+    }
+  }
+  // 添加/修改 新的 props
+  for (let name in nextProps) {
+    if (name === 'children') {
+      continue
+    }
+    const oldValue = prevProps[name]
+    const newValue = nextProps[name]
+    if (name.slice(0, 2) === 'on') {
+      const eventName = name.slice(2).toLowerCase()
+      dom.removeEventListener(eventName, oldValue as EventListenerOrEventListenerObject)
+      dom.addEventListener(eventName, newValue as EventListenerOrEventListenerObject)
+    } else {
+      if (newValue !== oldValue) {
+        dom.setAttribute(name, newValue as string)
+      }
+    }
+  }
+  return dom;
 }
 
 function dispatchUpdate(fiber: IFiber) {
-  
+  scheduleCallback(workLoop.bind(null, fiber))
+}
+
+function scheduleCallback(func: () => IFiber | null) {
+  function callback(deadline) {
+    const fiber = func()
+    if (!fiber) {
+      return
+    }
+    shouldYield = deadline.timeRemaining() < 1;
+    (window as any).requestIdleCallback(callback)
+  }
+  (window as any).requestIdleCallback(callback)
+}
+
+let shouldYield = false
+function workLoop (fiber: IFiber) {
+  while (fiber && !shouldYield) {
+    fiber = reconcil(fiber)
+  }
+  if (fiber) {
+    workLoop(fiber)
+  } else {
+    commitWork(fiber)
+  }
+}
+
+function reconcil(fiber: IFiber) {
+  return fiber
+}
+
+function commitWork(fiber: IFiber) {
+
 }
