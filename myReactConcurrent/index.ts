@@ -18,9 +18,7 @@ interface IElement extends Record<string, unknown> {
 }
 
 interface IElementProps extends Record<string, unknown> {
-  key?: string | number
   children?: IElement[]
-  ref? : Ref
   nodeValue?: number | string
 }
 
@@ -41,8 +39,8 @@ function Fragment(props: IElementProps) {
 function createElement(type: string | Function, attrs: IElementProps, ...childrenElements: (IFiber | string)[]): IElement {
   const props = attrs || {}
   const children: IElement[] = []
-  const key = attrs.key;
-  const ref = attrs.ref || null;
+  const key = attrs.key as string || null;
+  const ref = attrs.ref as Ref || null;
   for (let i = 0; i < childrenElements.length; i++) {
     const child = childrenElements[i]
     if (child) {
@@ -82,6 +80,24 @@ function render(reactElement: IElement, dom: Element) {
     type: null,
   }
   dispatchUpdate(rootFiber)
+}
+
+function createDom(fiber: IFiber) {
+  if (typeof fiber.type !== 'string') {
+    return null
+  }
+  let dom: Element|Text
+  if (fiber.type === TEXT_ELEMENT) {
+    dom = document.createTextNode('')
+  } else {
+    dom = document.createElement(fiber.type)
+  }
+  updateDomProps(dom, {}, fiber.props)
+  return dom
+}
+
+function updateDomProps(dom, prevProps, nextProps) {
+  
 }
 
 function dispatchUpdate(fiber: IFiber) {
