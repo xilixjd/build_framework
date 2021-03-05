@@ -23,6 +23,7 @@ interface IElementProps extends Record<string, unknown> {
 }
 
 interface IFiber extends IElement {
+  alternate?: IFiber
   child?: IFiber
   parent?: IFiber
   sibling?: IFiber
@@ -137,21 +138,22 @@ function dispatchUpdate(fiber: IFiber) {
   scheduleCallback(workLoop.bind(null, fiber))
 }
 
+let shouldYield = false
 function scheduleCallback(func: () => IFiber | null) {
   function callback(deadline) {
-    const fiber = func()
-    if (!fiber) {
-      return
-    }
+    func()
     shouldYield = deadline.timeRemaining() < 1;
     (window as any).requestIdleCallback(callback)
   }
   (window as any).requestIdleCallback(callback)
 }
 
-let shouldYield = false
+function isShouldYield() {
+  return shouldYield;
+}
+
 function workLoop (fiber: IFiber) {
-  while (fiber && !shouldYield) {
+  while (fiber && !isShouldYield()) {
     fiber = reconcil(fiber)
   }
   if (fiber) {
@@ -162,8 +164,39 @@ function workLoop (fiber: IFiber) {
 }
 
 function reconcil(fiber: IFiber) {
-  return fiber
+  const isFunctionComponent = typeof fiber.type === 'function'
+  if (isFunctionComponent) {
+    updateFunctionComponent(fiber)
+  } else {
+    updateElementComponent(fiber)
+  }
+  if (fiber.child) {
+    return fiber.child
+  }
+  while (fiber) {
+    fiber = fiber.sibling
+    if (fiber) {
+      return fiber
+    }
+    fiber = fiber.parent
+  }
 }
+
+function updateFunctionComponent(fiber: IFiber) {
+  const newChildren: IFiber[] = (fiber.type as Function)(fiber.props)
+  const oldFiber = fiber.alternate
+  const oldChildren: IFiber[] = []
+  let oldFiberNow = oldFiber
+  while (oldFiberNow) {
+    oldChildren.push(oldFiberNow)
+    oldFiberNow = oldFiberNow.sibling
+  }
+  let headIndex = 0
+  let tailIndex = newChildren.length - 1
+  
+}
+
+function updateElementComponent(fiber: IFiber) {}
 
 function commitWork(fiber: IFiber) {
 
