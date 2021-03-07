@@ -1,7 +1,13 @@
 enum EffectTag {
-  INSERT = 0b00000001,
-  UPDATE = 0b00000010,
-  DELETE = 0b00000100,
+  INSERT  = 0b00000001,
+  UPDATE  = 0b00000010,
+  DELETE  = 0b00000100,
+  // 记录旧节点还在不在，用于删除
+  VISITED = 0b00001000,
+}
+
+function hasEffectTagOrNot(fiber: IFiber, effectTag: EffectTag) {
+  return (fiber.effect & effectTag) === 1
 }
 
 const TEXT_ELEMENT = 'TEXT_ELEMENT'
@@ -15,6 +21,7 @@ interface IElement extends Record<string, unknown> {
   props: IElementProps
   key?: string | number
   ref?: Ref
+  effect?: number
 }
 
 interface IElementProps extends Record<string, unknown> {
@@ -30,8 +37,10 @@ interface IFiber extends IElement {
 
   dom?: HTMLElement
 
-  time: number
+  time?: number
 }
+
+const reconcilToDelete: IFiber[] = []
 
 function Fragment(props: IElementProps) {
   return props.children
@@ -59,6 +68,7 @@ function createElement(type: string | Function, attrs: IElementProps, ...childre
     props,
     key,
     ref,
+    effect: 0,
   }
 }
 
@@ -78,7 +88,7 @@ function render(reactElement: IElement, dom: HTMLElement) {
       children: [reactElement]
     },
     time: 0,
-    type: null,
+    type: dom.tagName.toLowerCase(),
   }
   dispatchUpdate(rootFiber)
 }
@@ -153,11 +163,12 @@ function isShouldYield() {
 }
 
 function workLoop (fiber: IFiber) {
-  while (fiber && !isShouldYield()) {
-    fiber = reconcil(fiber)
+  let nowFiber = fiber
+  while (nowFiber && !isShouldYield()) {
+    nowFiber = reconcil(nowFiber)
   }
-  if (fiber) {
-    workLoop(fiber)
+  if (nowFiber) {
+    workLoop(nowFiber)
   } else {
     commitWork(fiber)
   }
@@ -182,22 +193,58 @@ function reconcil(fiber: IFiber) {
   }
 }
 
-function updateFunctionComponent(fiber: IFiber) {
-  const newChildren: IFiber[] = (fiber.type as Function)(fiber.props)
-  const oldFiber = fiber.alternate
+// diff elements 并把 elements 变成 fibers
+function reconcilChildren(fiber: IFiber, newChildren: IElement[]) {
+  const oldFiber = fiber.alternate?.child
   const oldChildren: IFiber[] = []
+  // TODO: 空间开销过大？
+  const oldChildrenDict: { [key:string]: IFiber } = {}
   let oldFiberNow = oldFiber
+  let index = 0
   while (oldFiberNow) {
+    const oldFiberKey = oldFiberNow.key || index
+    const oldTypeStr = oldFiberNow.type.toString()
+    oldChildrenDict[oldFiberKey + oldTypeStr]  = oldFiberNow
     oldChildren.push(oldFiberNow)
     oldFiberNow = oldFiberNow.sibling
   }
-  let headIndex = 0
-  let tailIndex = newChildren.length - 1
-  
+  for (let i = 0; i < newChildren.length; i++) {
+    const newFiber = newChildren[i] as IFiber
+    const newFiberKey = newFiber.key || i
+    const newTypeStr = newFiber.type.toString()
+    const sameOldFiber = oldChildrenDict[newFiberKey + newTypeStr]
+    if (sameOldFiber) {
+      newFiber.effect = EffectTag.UPDATE
+      newFiber.alternate = sameOldFiber
+      sameOldFiber.effect |= EffectTag.VISITED
+    } else {
+      newFiber.effect = EffectTag.INSERT
+    }
+    if (i === 0) {
+      fiber.child = newFiber
+    }
+    newFiber.parent = fiber
+    newFiber.sibling = newChildren[i + 1]
+  }
+  for (let key in oldChildrenDict) {
+    const oldFiber = oldChildrenDict[key]
+    if (!hasEffectTagOrNot(oldFiber, EffectTag.VISITED)) {
+      oldFiber.effect |= EffectTag.DELETE
+      reconcilToDelete.push(oldFiber)
+    }
+  }
 }
 
-function updateElementComponent(fiber: IFiber) {}
+function updateFunctionComponent(fiber: IFiber) {
+  const newChildren: IElement[] = (fiber.type as Function)(fiber.props)
+  reconcilChildren(fiber, newChildren)
+}
+
+function updateElementComponent(fiber: IFiber) {
+  const newChildren: IElement[] = fiber.props.children
+  reconcilChildren(fiber, newChildren)
+}
 
 function commitWork(fiber: IFiber) {
-
+  
 }
