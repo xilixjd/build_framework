@@ -12,7 +12,7 @@ function hasEffectTagOrNot(fiber: IFiber, effectTag: EffectTag) {
 
 const TEXT_ELEMENT = 'TEXT_ELEMENT'
 
-interface Ref<T = unknown> {
+type Ref<T = unknown> = (dom: HTMLElement) => void | {
   current: T
 }
 
@@ -42,15 +42,27 @@ interface IFiber extends IElement {
 
 const reconcilToDelete: IFiber[] = []
 
+let currentTopFiber: IFiber|null = null
+
 function Fragment(props: IElementProps) {
   return props.children
 }
 
-function createElement(type: string | Function, attrs: IElementProps, ...childrenElements: (IFiber | string)[]): IElement {
+function refer(ref: Ref, dom?: HTMLElement): void{
+  if (ref) {
+    if (typeof ref === 'function') {
+      ref(dom)
+    } else {
+      (ref as { current: HTMLElement }).current = dom
+    }
+  }
+}
+
+function createElement(type: string | Function, attrs: IElementProps={}, ...childrenElements: (IFiber | string)[]): IElement {
   const props = attrs || {}
   const children: IElement[] = []
-  const key = attrs.key as string || null;
-  const ref = attrs.ref as Ref || null;
+  const key = props.key as string || null;
+  const ref = props.ref as Ref || null;
   for (let i = 0; i < childrenElements.length; i++) {
     const child = childrenElements[i]
     if (child) {
@@ -107,7 +119,7 @@ function createDom(fiber: IFiber) {
   return dom
 }
 
-function updateDomProps(dom: HTMLElement, prevProps: IElementProps, nextProps: IElementProps) {
+function updateDomProps(dom: HTMLElement, prevProps: IElementProps = {}, nextProps: IElementProps) {
   // 删掉新的有老的没有的 props
   for (let name in prevProps) {
     if (name === 'children') {
@@ -145,6 +157,7 @@ function updateDomProps(dom: HTMLElement, prevProps: IElementProps, nextProps: I
 }
 
 function dispatchUpdate(fiber: IFiber) {
+  currentTopFiber = fiber
   scheduleCallback(workLoop.bind(null, fiber))
 }
 
@@ -170,8 +183,9 @@ function workLoop (fiber: IFiber) {
   if (nowFiber) {
     workLoop(nowFiber)
   } else {
-    commitWork(fiber)
+    commitTop()
   }
+  return null
 }
 
 function reconcil(fiber: IFiber) {
@@ -185,9 +199,8 @@ function reconcil(fiber: IFiber) {
     return fiber.child
   }
   while (fiber) {
-    fiber = fiber.sibling
-    if (fiber) {
-      return fiber
+    if (fiber.sibling) {
+      return fiber.sibling
     }
     fiber = fiber.parent
   }
@@ -241,10 +254,52 @@ function updateFunctionComponent(fiber: IFiber) {
 }
 
 function updateElementComponent(fiber: IFiber) {
+  // 可以在 reconcil 阶段建 dom 吗？
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber)
+  }
   const newChildren: IElement[] = fiber.props.children
   reconcilChildren(fiber, newChildren)
 }
 
-function commitWork(fiber: IFiber) {
-  
+function commitTop() {
+  if (currentTopFiber) {
+    // rootFiber 的情况
+    currentTopFiber.parent ? commit(currentTopFiber) : commit(currentTopFiber.child)
+    reconcilToDelete.forEach(commit)
+  }
+}
+
+function commit(fiber: IFiber) {
+  if (!fiber) {
+    return
+  }
+  let hasDomFiber = fiber.parent
+  while (!hasDomFiber.dom) {
+    hasDomFiber = hasDomFiber.parent
+  }
+  const parentDom = hasDomFiber.dom
+  if (fiber.dom && hasEffectTagOrNot(fiber, EffectTag.DELETE)) {
+    parentDom.removeChild(fiber.dom)
+    refer(fiber.ref, null)
+    fiber.effect = 0
+    return
+  }
+  if (fiber.dom && hasEffectTagOrNot(fiber, EffectTag.INSERT)) {
+    const siblingDom = fiber.sibling?.dom
+    parentDom.insertBefore(fiber.dom, siblingDom)
+  }
+  if (fiber.dom && hasEffectTagOrNot(fiber, EffectTag.UPDATE)) {
+    updateDomProps(fiber.dom, fiber.alternate?.props, fiber.props)
+  }
+  refer(fiber.ref, fiber.dom)
+  fiber.effect = 0
+  commit(fiber.child)
+  commit(fiber.sibling)
+}
+
+const Didact = {
+  createElement,
+  render,
+  // useState,
 }
