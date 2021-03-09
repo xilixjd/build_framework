@@ -89,6 +89,7 @@ function createTextElement(text: string | number): IElement {
     type: TEXT_ELEMENT,
     props: {
       nodeValue: text,
+      children: [],
     }
   }
 }
@@ -131,6 +132,8 @@ function updateDomProps(dom: HTMLElement, prevProps: IElementProps = {}, nextPro
       if (name.slice(0, 2) == 'on') {
         const eventName = name.slice(2).toLowerCase()
         dom.removeEventListener(eventName, oldValue as EventListenerOrEventListenerObject)
+      } else if (name in dom) {
+        dom[name] = ''
       } else {
         dom.removeAttribute(name)
       }
@@ -149,7 +152,11 @@ function updateDomProps(dom: HTMLElement, prevProps: IElementProps = {}, nextPro
       dom.addEventListener(eventName, newValue as EventListenerOrEventListenerObject)
     } else {
       if (newValue !== oldValue) {
-        dom.setAttribute(name, newValue as string)
+        if (name in dom) {
+          dom[name] = newValue
+        } else {
+          dom.setAttribute(name, newValue as string)
+        }
       }
     }
   }
@@ -158,7 +165,8 @@ function updateDomProps(dom: HTMLElement, prevProps: IElementProps = {}, nextPro
 
 function dispatchUpdate(fiber: IFiber) {
   currentTopFiber = fiber
-  scheduleCallback(workLoop.bind(null, fiber))
+  // scheduleCallback(workLoop.bind(null, fiber))
+  workLoop(fiber)
 }
 
 let shouldYield = false
@@ -249,7 +257,7 @@ function reconcilChildren(fiber: IFiber, newChildren: IElement[]) {
 }
 
 function updateFunctionComponent(fiber: IFiber) {
-  const newChildren: IElement[] = (fiber.type as Function)(fiber.props)
+  const newChildren: IElement[] = [(fiber.type as Function)(fiber.props)]
   reconcilChildren(fiber, newChildren)
 }
 
@@ -286,7 +294,13 @@ function commit(fiber: IFiber) {
     return
   }
   if (fiber.dom && hasEffectTagOrNot(fiber, EffectTag.INSERT)) {
-    const siblingDom = fiber.sibling?.dom
+    
+    let siblingDom = fiber.sibling?.dom
+    if (fiber.sibling) {
+      if (hasEffectTagOrNot(fiber.sibling, EffectTag.INSERT)) {
+        siblingDom = null
+      }
+    }
     parentDom.insertBefore(fiber.dom, siblingDom)
   }
   if (fiber.dom && hasEffectTagOrNot(fiber, EffectTag.UPDATE)) {
