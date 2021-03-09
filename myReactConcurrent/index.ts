@@ -295,11 +295,14 @@ function commit(fiber: IFiber) {
   }
   if (fiber.dom && hasEffectTagOrNot(fiber, EffectTag.INSERT)) {
     
-    let siblingDom = fiber.sibling?.dom
-    if (fiber.sibling) {
-      if (hasEffectTagOrNot(fiber.sibling, EffectTag.INSERT)) {
-        siblingDom = null
+    let siblingDom = null
+    let siblingFiber = fiber.sibling
+    while (siblingFiber) {
+      if (!hasEffectTagOrNot(fiber.sibling, EffectTag.INSERT) && siblingFiber.dom) {
+        siblingDom = siblingFiber.dom
+        break
       }
+      siblingFiber = siblingFiber.sibling
     }
     parentDom.insertBefore(fiber.dom, siblingDom)
   }
