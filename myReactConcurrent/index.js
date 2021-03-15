@@ -7,11 +7,14 @@ var EffectTag;
     EffectTag[EffectTag["VISITED"] = 8] = "VISITED";
 })(EffectTag || (EffectTag = {}));
 function hasEffectTagOrNot(fiber, effectTag) {
-    return (fiber.effect & effectTag) === 1;
+    return (fiber.effect & effectTag) !== 0;
 }
 var TEXT_ELEMENT = 'TEXT_ELEMENT';
 var reconcilToDelete = [];
+// commit 专用
 var currentTopFiber = null;
+// hooks 专用
+var currentReconcilFiber = null;
 function Fragment(props) {
     return props.children;
 }
@@ -196,6 +199,7 @@ function reconcilChildren(fiber, newChildren) {
     var index = 0;
     while (oldFiberNow) {
         var oldFiberKey = oldFiberNow.key || index;
+        index += 1;
         var oldTypeStr = oldFiberNow.type.toString();
         oldChildrenDict[oldFiberKey + oldTypeStr] = oldFiberNow;
         oldChildren.push(oldFiberNow);
@@ -209,9 +213,11 @@ function reconcilChildren(fiber, newChildren) {
         if (sameOldFiber) {
             newFiber.effect = EffectTag.UPDATE;
             newFiber.alternate = sameOldFiber;
+            newFiber.dom = sameOldFiber.dom;
             sameOldFiber.effect |= EffectTag.VISITED;
         }
         else {
+            newFiber.alternate = newFiber;
             newFiber.effect = EffectTag.INSERT;
         }
         if (i === 0) {
@@ -229,7 +235,9 @@ function reconcilChildren(fiber, newChildren) {
     }
 }
 function updateFunctionComponent(fiber) {
+    currentReconcilFiber = fiber;
     var newChildren = [fiber.type(fiber.props)];
+    resetHooksIndex();
     reconcilChildren(fiber, newChildren);
 }
 function updateElementComponent(fiber) {
@@ -245,6 +253,7 @@ function commitTop() {
         // rootFiber 的情况
         currentTopFiber.parent ? commit(currentTopFiber) : commit(currentTopFiber.child);
         reconcilToDelete.forEach(commit);
+        currentTopFiber = null;
     }
 }
 function commit(fiber) {
@@ -283,7 +292,35 @@ function commit(fiber) {
     commit(fiber.child);
     commit(fiber.sibling);
 }
+// 一个 func 可能有多个 hooks
+var hooksIndex = 0;
+function resetHooksIndex() {
+    hooksIndex = 0;
+}
+function useState(value) {
+    if (currentReconcilFiber) {
+        // const hooks = (currentReconcilFiber.hooks || []) as T[]
+        var hooks = currentReconcilFiber.hooks;
+        if (!hooks) {
+            currentReconcilFiber.hooks = [];
+        }
+        if (hooksIndex <= currentReconcilFiber.hooks.length) {
+            currentReconcilFiber.hooks.push({ state: value, fiber: currentReconcilFiber });
+        }
+        var hook_1 = currentReconcilFiber.hooks[hooksIndex++];
+        hook_1.fiber = currentReconcilFiber;
+        return [
+            hook_1.state,
+            function (func) {
+                var state = func(hook_1.state);
+                hook_1.state = state;
+                dispatchUpdate(hook_1.fiber);
+            }
+        ];
+    }
+}
 var Didact = {
     createElement: createElement,
-    render: render
+    render: render,
+    useState: useState
 };

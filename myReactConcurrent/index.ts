@@ -7,7 +7,7 @@ enum EffectTag {
 }
 
 function hasEffectTagOrNot(fiber: IFiber, effectTag: EffectTag) {
-  return (fiber.effect & effectTag) === 1
+  return (fiber.effect & effectTag) !== 0
 }
 
 const TEXT_ELEMENT = 'TEXT_ELEMENT'
@@ -38,11 +38,16 @@ interface IFiber extends IElement {
   dom?: HTMLElement
 
   time?: number
+
+  hooks?: {state: unknown, fiber: IFiber}[]
 }
 
 const reconcilToDelete: IFiber[] = []
 
+// commit 专用
 let currentTopFiber: IFiber|null = null
+// hooks 专用
+let currentReconcilFiber: IFiber|null = null
 
 function Fragment(props: IElementProps) {
   return props.children
@@ -224,6 +229,7 @@ function reconcilChildren(fiber: IFiber, newChildren: IElement[]) {
   let index = 0
   while (oldFiberNow) {
     const oldFiberKey = oldFiberNow.key || index
+    index += 1
     const oldTypeStr = oldFiberNow.type.toString()
     oldChildrenDict[oldFiberKey + oldTypeStr]  = oldFiberNow
     oldChildren.push(oldFiberNow)
@@ -237,8 +243,10 @@ function reconcilChildren(fiber: IFiber, newChildren: IElement[]) {
     if (sameOldFiber) {
       newFiber.effect = EffectTag.UPDATE
       newFiber.alternate = sameOldFiber
+      newFiber.dom = sameOldFiber.dom
       sameOldFiber.effect |= EffectTag.VISITED
     } else {
+      newFiber.alternate = newFiber
       newFiber.effect = EffectTag.INSERT
     }
     if (i === 0) {
@@ -257,7 +265,9 @@ function reconcilChildren(fiber: IFiber, newChildren: IElement[]) {
 }
 
 function updateFunctionComponent(fiber: IFiber) {
+  currentReconcilFiber = fiber
   const newChildren: IElement[] = [(fiber.type as Function)(fiber.props)]
+  resetHooksIndex()
   reconcilChildren(fiber, newChildren)
 }
 
@@ -275,6 +285,7 @@ function commitTop() {
     // rootFiber 的情况
     currentTopFiber.parent ? commit(currentTopFiber) : commit(currentTopFiber.child)
     reconcilToDelete.forEach(commit)
+    currentTopFiber = null
   }
 }
 
@@ -315,8 +326,39 @@ function commit(fiber: IFiber) {
   commit(fiber.sibling)
 }
 
+// 一个 func 可能有多个 hooks
+let hooksIndex = 0
+
+function resetHooksIndex() {
+  hooksIndex = 0
+}
+
+function useState<T=any>(value: T): [T, (a: (b: T)=>T) => void] {
+  if (currentReconcilFiber) {
+    // const hooks = (currentReconcilFiber.hooks || []) as T[]
+    let hooks = currentReconcilFiber.hooks
+    if (!hooks) {
+      currentReconcilFiber.hooks = []
+    }
+    if (hooksIndex <= currentReconcilFiber.hooks.length) {
+      currentReconcilFiber.hooks.push({ state: value, fiber: currentReconcilFiber })
+    }
+    
+    const hook = currentReconcilFiber.hooks[hooksIndex++]
+    hook.fiber = currentReconcilFiber
+    return [
+      hook.state as T,
+      (func) => {
+        const state = func(hook.state as T)
+        hook.state = state
+        dispatchUpdate(hook.fiber)
+      }
+    ]
+  }
+}
+
 const Didact = {
   createElement,
   render,
-  // useState,
+  useState,
 }
