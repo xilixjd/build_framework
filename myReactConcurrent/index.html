@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <script src="./index.js"></script>
+  <script src="../react15/babel.js"></script>
+
+  <style>
+    .content {
+      position: relative;
+    }
+
+    .content-row {
+      display: flex;
+      flex-wrap: nowrap;
+    }
+
+    .content-row.grid {
+      margin-left: 100px;
+    }
+
+    .content-row > div {
+      flex: 0 0 100px;
+      border-bottom: 1px solid #e0e2e4;
+    border-right: 1px solid #e0e2e4;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    padding: 0 4px;
+    line-height: 22px;
+    box-sizing: border-box;
+    }
+
+    .content-left {
+      position: absolute;
+      top: 22px;
+      left: 0;
+    }
+  </style>
+
+
+  <script type="text/babel">
+  /** @jsx Didact.createElement */
+
+    function App() {
+      const [state, setState] = Didact.useState(1)
+      const headerArr = 'abcdefghijklmnopqrstuvwxyz'.split('')
+      const leftNumArr = []
+      for (let i = 1; i < 100; i++) {
+        leftNumArr.push(i)
+      }
+      const rowsArr = new Array(99).fill(null);
+      const columnsArr = new Array(26).fill(null);
+      return (
+        <div class="main">
+          <div class="content">
+            <div class="content-main">
+              <div class="content-row">
+                <div>-</div>
+                {
+                  headerArr.map(item => <div>{item}</div>)
+                }
+              </div>
+              
+              {
+                rowsArr.map(item => (
+                  <div class="content-row grid">
+                    {columnsArr.map(item1 => <div>1</div>)}
+                  </div>))
+              }
+            </div>
+            <div class="content-left">
+              { leftNumArr.map(item => <div>{item}</div>) }
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+
+
+
+
+    const element = <App />
+    const container = document.getElementById("root")
+    Didact.render(element, container)
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+</body>
+</html>

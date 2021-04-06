@@ -65,7 +65,7 @@ function refer(ref: Ref, dom?: HTMLElement): void{
 
 function createElement(type: string | Function, attrs: IElementProps={}, ...childrenElements: (IFiber | string)[]): IElement {
   const props = attrs || {}
-  const children: IElement[] = []
+  let children: IElement[] = []
   const key = props.key as string || null;
   const ref = props.ref as Ref || null;
   for (let i = 0; i < childrenElements.length; i++) {
@@ -74,6 +74,8 @@ function createElement(type: string | Function, attrs: IElementProps={}, ...chil
       if (typeof child === 'string' || typeof child === 'number') {
         const element = createTextElement(child)
         children.push(element)
+      } else if (Array.isArray(child)) {
+        children = [...children, ...child]
       } else {
         children.push(child)
       }
@@ -177,8 +179,8 @@ function dispatchUpdate(fiber: IFiber) {
 let shouldYield = false
 function scheduleCallback(func: () => IFiber | null) {
   function callback(deadline) {
-    func()
     shouldYield = deadline.timeRemaining() < 1;
+    func();
     (window as any).requestIdleCallback(callback)
   }
   (window as any).requestIdleCallback(callback)
@@ -326,14 +328,14 @@ function commit(fiber: IFiber) {
   commit(fiber.sibling)
 }
 
-// 一个 func 可能有多个 hooks
+// 一个 func 可能调了多次 useState
 let hooksIndex = 0
 
 function resetHooksIndex() {
   hooksIndex = 0
 }
 
-function useState<T=any>(value: T): [T, (a: (b: T)=>T) => void] {
+function useState<T=unknown>(value: T): [T, (a: (b: T)=>T) => void] {
   if (currentReconcilFiber) {
     // const hooks = (currentReconcilFiber.hooks || []) as T[]
     let hooks = currentReconcilFiber.hooks

@@ -1,3 +1,8 @@
+var __spreadArray = (this && this.__spreadArray) || function (to, from) {
+    for (var i = 0, il = from.length, j = to.length; i < il; i++, j++)
+        to[j] = from[i];
+    return to;
+};
 var EffectTag;
 (function (EffectTag) {
     EffectTag[EffectTag["INSERT"] = 1] = "INSERT";
@@ -44,6 +49,9 @@ function createElement(type, attrs) {
             if (typeof child === 'string' || typeof child === 'number') {
                 var element = createTextElement(child);
                 children.push(element);
+            }
+            else if (Array.isArray(child)) {
+                children = __spreadArray(__spreadArray([], children), child);
             }
             else {
                 children.push(child);
@@ -148,8 +156,8 @@ function dispatchUpdate(fiber) {
 var shouldYield = false;
 function scheduleCallback(func) {
     function callback(deadline) {
-        func();
         shouldYield = deadline.timeRemaining() < 1;
+        func();
         window.requestIdleCallback(callback);
     }
     window.requestIdleCallback(callback);
@@ -292,7 +300,7 @@ function commit(fiber) {
     commit(fiber.child);
     commit(fiber.sibling);
 }
-// 一个 func 可能有多个 hooks
+// 一个 func 可能调了多次 useState
 var hooksIndex = 0;
 function resetHooksIndex() {
     hooksIndex = 0;
