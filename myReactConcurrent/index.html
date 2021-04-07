@@ -24,13 +24,30 @@
     .content-row > div {
       flex: 0 0 100px;
       border-bottom: 1px solid #e0e2e4;
-    border-right: 1px solid #e0e2e4;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    padding: 0 4px;
-    line-height: 22px;
-    box-sizing: border-box;
+      border-right: 1px solid #e0e2e4;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      padding: 0 4px;
+      line-height: 22px;
+      height: 22px;
+      box-sizing: border-box;
+    }
+
+    .content-row > input {
+      flex: 0 0 100px;
+      border: 1px solid;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      padding: 0 4px;
+      line-height: 22px;
+      height: 22px;
+      box-sizing: border-box;
+    }
+
+    .content-row > div.isChoosed {
+      border: 1px solid;
     }
 
     .content-left {
@@ -44,15 +61,47 @@
   <script type="text/babel">
   /** @jsx Didact.createElement */
 
+    const rowsLength = 99
+    const columnLength = 26
+    let initData = []
+    for (let i = 0; i < rowsLength; i++) {
+      const temp = []
+      for (let j = 0; j < columnLength; j++) {
+        temp.push({
+          text: '',
+          isChoosed: false,
+          isEditing: false,
+        })
+      }
+      initData.push(temp)
+    }
+
     function App() {
-      const [state, setState] = Didact.useState(1)
       const headerArr = 'abcdefghijklmnopqrstuvwxyz'.split('')
       const leftNumArr = []
       for (let i = 1; i < 100; i++) {
         leftNumArr.push(i)
       }
-      const rowsArr = new Array(99).fill(null);
-      const columnsArr = new Array(26).fill(null);
+      const [data, setState] = Didact.useState(initData)
+      function cellClick(index1, index2) {
+        setState((s) => {
+          for (let i = 0; i < s.length; i++) {
+            for (let j = 0; j < s[i].length; j++) {
+              s[i][j].isChoosed = false;
+              s[i][j].isEditing = false;
+            }
+          }
+          s[index1][index2].isChoosed = true
+          s[index1][index2].isEditing = true
+          return s
+        })
+      }
+      function cellInput(e, index1, index2) {
+        setState((s) => {
+          s[index1][index2].text = e.target.value
+          return s
+        })
+      }
       return (
         <div class="main">
           <div class="content">
@@ -65,9 +114,15 @@
               </div>
               
               {
-                rowsArr.map(item => (
+                data.map((item, index1) => (
                   <div class="content-row grid">
-                    {columnsArr.map(item1 => <div>1</div>)}
+                    {item.map((item1, index2) => {
+                      if (!item1.isEditing) {
+                        return <div class={item1.isChoosed ? 'isChoosed' : ''} onClick={() => cellClick(index1, index2)}>{item1.text}</div>
+                      } else {
+                        return <input onInput={(e) => cellInput(e, index1, index2)} value={item1.text}></input>
+                      }
+                    })}
                   </div>))
               }
             </div>

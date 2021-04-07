@@ -140,7 +140,11 @@ function updateDomProps(dom: HTMLElement, prevProps: IElementProps = {}, nextPro
         const eventName = name.slice(2).toLowerCase()
         dom.removeEventListener(eventName, oldValue as EventListenerOrEventListenerObject)
       } else if (name in dom) {
-        dom[name] = ''
+        if (name === 'contentEditable') {
+          dom[name] = 'false'
+        } else {
+          dom[name] = ''
+        }
       } else {
         dom.removeAttribute(name)
       }

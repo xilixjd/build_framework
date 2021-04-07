@@ -116,7 +116,12 @@ function updateDomProps(dom, prevProps, nextProps) {
                 dom.removeEventListener(eventName, oldValue);
             }
             else if (name_1 in dom) {
-                dom[name_1] = '';
+                if (name_1 === 'contentEditable') {
+                    dom[name_1] = 'false';
+                }
+                else {
+                    dom[name_1] = '';
+                }
             }
             else {
                 dom.removeAttribute(name_1);
