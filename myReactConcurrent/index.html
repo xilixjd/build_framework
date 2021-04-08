@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,7 +22,7 @@
       margin-left: 100px;
     }
 
-    .content-row > div {
+    .content-row>div {
       flex: 0 0 100px;
       border-bottom: 1px solid #e0e2e4;
       border-right: 1px solid #e0e2e4;
@@ -34,7 +35,7 @@
       box-sizing: border-box;
     }
 
-    .content-row > input {
+    .content-row>input {
       flex: 0 0 100px;
       border: 1px solid;
       white-space: nowrap;
@@ -46,7 +47,7 @@
       box-sizing: border-box;
     }
 
-    .content-row > div.isChoosed {
+    .content-row>div.isChoosed {
       border: 1px solid;
     }
 
@@ -59,10 +60,10 @@
 
 
   <script type="text/babel">
-  /** @jsx Didact.createElement */
+    /** @jsx Didact.createElement */
 
-    const rowsLength = 99
-    const columnLength = 26
+    const rowsLength = 10
+    const columnLength = 10
     let initData = []
     for (let i = 0; i < rowsLength; i++) {
       const temp = []
@@ -76,12 +77,17 @@
       initData.push(temp)
     }
 
+    const headerArr = []
+    for (let i = 0; i < columnLength; i++) {
+      headerArr.push(i + 1)
+    }
+    const leftNumArr = []
+    for (let i = 0; i < rowsLength; i++) {
+      leftNumArr.push(i + 1)
+    }
+
     function App() {
-      const headerArr = 'abcdefghijklmnopqrstuvwxyz'.split('')
-      const leftNumArr = []
-      for (let i = 1; i < 100; i++) {
-        leftNumArr.push(i)
-      }
+
       const [data, setState] = Didact.useState(initData)
       function cellClick(index1, index2) {
         setState((s) => {
@@ -102,6 +108,20 @@
           return s
         })
       }
+      function cellDown(index1, index2) {
+        console.log(index1, index2)
+      }
+      function cellUp(index1, index2) {
+        console.log(index1, index2)
+      }
+      function toChoosedRange(s, startIndex1, startIndex2, endIndex1, endIndex2) {
+        let smallRowIndex = Math.min(startIndex1, endIndex1)
+        let largeRowIndex = Math.min(startIndex2, endIndex2)
+        for (let i = startIndex1; i < endIndex1 + 1; i++) {
+          for (let j = startIndex2; j < endIndex2 + 1; j++) {
+          }
+        }
+      }
       return (
         <div class="main">
           <div class="content">
@@ -112,13 +132,18 @@
                   headerArr.map(item => <div>{item}</div>)
                 }
               </div>
-              
+
               {
                 data.map((item, index1) => (
                   <div class="content-row grid">
                     {item.map((item1, index2) => {
                       if (!item1.isEditing) {
-                        return <div class={item1.isChoosed ? 'isChoosed' : ''} onClick={() => cellClick(index1, index2)}>{item1.text}</div>
+                        return <div
+                          class={item1.isChoosed ? 'isChoosed' : ''}
+                          onClick={() => cellClick(index1, index2)}
+                          onMousedown={() => cellDown(index1, index2)}
+                          onMouseup={() => cellUp(index1, index2)}
+                        >{item1.text}</div>
                       } else {
                         return <input onInput={(e) => cellInput(e, index1, index2)} value={item1.text}></input>
                       }
@@ -127,7 +152,7 @@
               }
             </div>
             <div class="content-left">
-              { leftNumArr.map(item => <div>{item}</div>) }
+              {leftNumArr.map(item => <div>{item}</div>)}
             </div>
           </div>
         </div>
@@ -143,7 +168,9 @@
     Didact.render(element, container)
   </script>
 </head>
+
 <body>
   <div id="root"></div>
 </body>
+
 </html>
