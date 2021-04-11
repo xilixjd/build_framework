@@ -62,9 +62,15 @@
     .content-left {
       position: absolute;
       width: 100px;
-      border: 1px solid #e0e2e4;
-      top: 44px;
+      top: 45px;
       left: 0;
+    }
+
+    .content-left > div {
+      border: 1px solid #e0e2e4;
+      height: 22px;
+      line-height: 22px;
+      box-sizing: border-box;
     }
   </style>
 
@@ -72,7 +78,7 @@
   <script type="text/babel">
     /** @jsx Didact.createElement */
 
-    const rowsLength = 10
+    const rowsLength = 15
     const columnLength = 10
     let initData = []
     for (let i = 0; i < rowsLength; i++) {
@@ -269,7 +275,9 @@
                 <li>单元格计算，选中单元格可编辑其表达式，这里第一行第二个单元格与第一行第一个单元格的内容一致</li>
               </ul>
               未完成功能：
-                <li>单元格的合并</li>
+                <ul>
+                  <li>单元格的合并</li>
+                </ul>
             </div>
           </div>
         </div>
