@@ -24,8 +24,7 @@
 
     .content-row>div {
       flex: 0 0 100px;
-      border-bottom: 1px solid #e0e2e4;
-      border-right: 1px solid #e0e2e4;
+      border: 1px solid #e0e2e4;
       white-space: nowrap;
       text-overflow: ellipsis;
       overflow: hidden;
@@ -47,13 +46,24 @@
       box-sizing: border-box;
     }
 
-    .content-row>div.isChoosed {
-      border: 1px solid;
+    .content-row>div.choosedBorder-top {
+      border-top: 1px solid;
+    }
+    .content-row>div.choosedBorder-right {
+      border-right: 1px solid;
+    }
+    .content-row>div.choosedBorder-bottom {
+      border-bottom: 1px solid;
+    }
+    .content-row>div.choosedBorder-left {
+      border-left: 1px solid;
     }
 
     .content-left {
       position: absolute;
-      top: 22px;
+      width: 100px;
+      border: 1px solid #e0e2e4;
+      top: 44px;
       left: 0;
     }
   </style>
@@ -68,11 +78,23 @@
     for (let i = 0; i < rowsLength; i++) {
       const temp = []
       for (let j = 0; j < columnLength; j++) {
-        temp.push({
-          text: '',
-          isChoosed: false,
-          isEditing: false,
-        })
+        if (i === 0 && j === 1) {
+          temp.push({
+            text: '',
+            isEditing: false,
+            // 上右下左 border 选中颜色
+            borderStatus: 0b0000,
+            compute: 'data[0][0].text',
+          })
+        } else {
+          temp.push({
+            text: '',
+            isEditing: false,
+            // 上右下左 border 选中颜色
+            borderStatus: 0b0000,
+            compute: '',
+          })
+        }
       }
       initData.push(temp)
     }
@@ -86,50 +108,132 @@
       leftNumArr.push(i + 1)
     }
 
-    function App() {
+    const choosedArr = [-1, -1, -1, -1]
 
+    function App() {
       const [data, setState] = Didact.useState(initData)
-      function cellClick(index1, index2) {
+      const [gridCompute, setGridCompute] = Didact.useState('')
+      const [choosedGrid, setChoosedGrid] = Didact.useState([-1, -1])
+      function toEditing(index1, index2) {
         setState((s) => {
           for (let i = 0; i < s.length; i++) {
             for (let j = 0; j < s[i].length; j++) {
-              s[i][j].isChoosed = false;
               s[i][j].isEditing = false;
             }
           }
-          s[index1][index2].isChoosed = true
           s[index1][index2].isEditing = true
+          return s
+        })
+      }
+      function clickColumnForSort(index) {
+        setState((s) => {
+          for (let i = 0; i < s.length; i++) {
+            for (let j = 0; j < s[i].length; j++) {
+              s[i][j].borderStatus = 0b0000;
+            }
+          }
+          const sortArr = []
+          for (let i = 0; i < s.length; i++) {
+            s[i][index].borderStatus = 0b0101
+            sortArr.push(s[i][index].text)
+          }
+          sortArr.sort()
+          for (let i = 0; i < s.length; i++) {
+            s[i][index].text = sortArr[i]
+          }
           return s
         })
       }
       function cellInput(e, index1, index2) {
         setState((s) => {
           s[index1][index2].text = e.target.value
+          for (let i = 0; i < s.length; i++) {
+            for (let j = 0; j < s[i].length; j++) {
+              if (s[i][j].compute) {
+                const data = s
+                const func = new Function('data', `return ${s[i][j].compute}`)
+                const text = func(data)
+                s[i][j].text = text
+              }
+            }
+          }
           return s
         })
       }
       function cellDown(index1, index2) {
-        console.log(index1, index2)
+        choosedArr[0] = index1
+        choosedArr[1] = index2
+        setState((s) => {
+          for (let i = 0; i < s.length; i++) {
+            for (let j = 0; j < s[i].length; j++) {
+              s[i][j].isEditing = false
+            }
+          }
+          return s
+        })
       }
       function cellUp(index1, index2) {
-        console.log(index1, index2)
+        choosedArr[2] = index1
+        choosedArr[3] = index2
+        toChoosedRange(choosedArr)
       }
-      function toChoosedRange(s, startIndex1, startIndex2, endIndex1, endIndex2) {
-        let smallRowIndex = Math.min(startIndex1, endIndex1)
-        let largeRowIndex = Math.min(startIndex2, endIndex2)
-        for (let i = startIndex1; i < endIndex1 + 1; i++) {
-          for (let j = startIndex2; j < endIndex2 + 1; j++) {
+      function cellClick(grid, index1, index2) {
+        setGridCompute((d) => grid.compute)
+        setChoosedGrid((a) => {
+          a[0] = index1
+          a[1] = index2
+          return a
+        })
+      }
+      function inputCompute(e, choosedGrid) {
+        const index1 = choosedGrid[0]
+        const index2 = choosedGrid[1]
+        setState(s => {
+          s[index1][index2].compute = e.target.value
+          return s
+        })
+        setGridCompute(a => e.target.value)
+      }
+      function toChoosedRange(choosedArr) {
+        setState((s) => {
+          const [startIndex1, startIndex2, endIndex1, endIndex2] = choosedArr
+          let smallRowIndex = Math.min(startIndex1, endIndex1)
+          let largeRowIndex = Math.max(startIndex1, endIndex1)
+          let smallColumnIndex = Math.min(startIndex2, endIndex2)
+          let largeColumnIndex = Math.max(startIndex2, endIndex2)
+          for (let i = 0; i < s.length; i++) {
+            for (let j = 0; j < s[i].length; j++) {
+              s[i][j].borderStatus = 0b0000
+            }
           }
-        }
+          for (let i = smallRowIndex; i < largeRowIndex + 1; i++) {
+            for (let j = smallColumnIndex; j < largeColumnIndex + 1; j++) {
+              if (i === smallRowIndex) {
+                s[i][j].borderStatus |= 0b1000
+              }
+              if (j === largeColumnIndex) {
+                s[i][j].borderStatus |= 0b0100
+              }
+              if (i === largeRowIndex) {
+                s[i][j].borderStatus |= 0b0010
+              }
+              if (j === smallColumnIndex) {
+                s[i][j].borderStatus |= 0b0001
+              }
+            }
+          }
+          return s
+        })
       }
       return (
         <div class="main">
           <div class="content">
+            <div><span>表达式:</span><input value={gridCompute} onInput={(e) => inputCompute(e, choosedGrid)}/></div>
             <div class="content-main">
               <div class="content-row">
                 <div>-</div>
                 {
-                  headerArr.map(item => <div>{item}</div>)
+                  headerArr.map((item, index) => <div onClick={() => clickColumnForSort(index)}>{item}</div>)
                 }
               </div>
 
@@ -138,9 +242,11 @@
                   <div class="content-row grid">
                     {item.map((item1, index2) => {
                       if (!item1.isEditing) {
+                        const classNames = getBorderClassNames(item1)
                         return <div
-                          class={item1.isChoosed ? 'isChoosed' : ''}
-                          onClick={() => cellClick(index1, index2)}
+                          class={classNames}
+                          onDblclick={() => toEditing(index1, index2)}
+                          onClick={() => cellClick(item1, index1, index2)}
                           onMousedown={() => cellDown(index1, index2)}
                           onMouseup={() => cellUp(index1, index2)}
                         >{item1.text}</div>
@@ -154,12 +260,38 @@
             <div class="content-left">
               {leftNumArr.map(item => <div>{item}</div>)}
             </div>
+            <div>
+              已实现功能：
+              <ul>
+                <li>拖动选中单元格</li>
+                <li>双击编辑单元格</li>
+                <li>点击列头进行列排序</li>
+                <li>单元格计算，选中单元格可编辑其表达式，这里第一行第二个单元格与第一行第一个单元格的内容一致</li>
+              </ul>
+              未完成功能：
+                <li>单元格的合并</li>
+            </div>
           </div>
         </div>
       )
     }
 
-
+    function getBorderClassNames(grid) {
+      const classNames = []
+      if ((grid.borderStatus & 0b1000) !== 0) {
+        classNames.push('choosedBorder-top')
+      }
+      if ((grid.borderStatus & 0b0100) !== 0) {
+        classNames.push('choosedBorder-right')
+      }
+      if ((grid.borderStatus & 0b0010) !== 0) {
+        classNames.push('choosedBorder-bottom')
+      }
+      if ((grid.borderStatus & 0b0001) !== 0) {
+        classNames.push('choosedBorder-left')
+      }
+      return classNames.join(' ')
+    }
 
 
 
